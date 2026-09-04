@@ -22,7 +22,10 @@ class TempRepository extends MainRepository
      *
      * @return array recipients' data
      */
-    public function fetchRecordsListValues(array $listArr, string $table, array $fields = ['uid', 'name', 'email']): array
+    public function fetchRecordsListValues(
+        array $listArr, 
+        string $table, 
+        array $fields = ['uid', 'name', 'email']): array
     {
         $outListArr = [];
         if (is_array($listArr) && count($listArr)) {
@@ -85,14 +88,11 @@ class TempRepository extends MainRepository
             ->selectLiteral('DISTINCT ' . $table . '.uid', $table . '.email')
             ->from($table)
             ->andWhere(
-                $queryBuilder->expr()->and()
-                ->add(
+                $queryBuilder->expr()->and(
                     $queryBuilder->expr()->in(
                         $table . '.pid',
                         $queryBuilder->createNamedParameter($pidArray, Connection::PARAM_INT_ARRAY)
-                    )
-                )
-                ->add(
+                    ),
                     $queryBuilder->expr()->neq(
                         $table . '.email',
                         $queryBuilder->createNamedParameter('')
@@ -119,37 +119,28 @@ class TempRepository extends MainRepository
                 )
             )
             ->andWhere(
-                $queryBuilder->expr()->and()
-                    ->add(
-                        $queryBuilder->expr()->in(
-                            $table . '.pid',
-                            $queryBuilder->createNamedParameter($pidArray, Connection::PARAM_INT_ARRAY)
-                        )
+                $queryBuilder->expr()->and(
+                    $queryBuilder->expr()->in(
+                        $table . '.pid',
+                        $queryBuilder->createNamedParameter($pidArray, Connection::PARAM_INT_ARRAY)
+                    ),
+                    $queryBuilder->expr()->eq(
+                        'mm_1.uid_foreign',
+                        $queryBuilder->quoteIdentifier('g_mm.uid_foreign')
+                    ),
+                    $queryBuilder->expr()->eq(
+                        'sys_dmail_group.uid',
+                        $queryBuilder->quoteIdentifier('g_mm.uid_local')
+                    ),
+                    $queryBuilder->expr()->eq(
+                        'sys_dmail_group.uid',
+                        $queryBuilder->createNamedParameter($groupUid, Connection::PARAM_INT)
+                    ),
+                    $queryBuilder->expr()->neq(
+                        $table . '.email',
+                        $queryBuilder->createNamedParameter('')
                     )
-                    ->add(
-                        $queryBuilder->expr()->eq(
-                            'mm_1.uid_foreign',
-                            $queryBuilder->quoteIdentifier('g_mm.uid_foreign')
-                        )
-                    )
-                    ->add(
-                        $queryBuilder->expr()->eq(
-                            'sys_dmail_group.uid',
-                            $queryBuilder->quoteIdentifier('g_mm.uid_local')
-                        )
-                    )
-                    ->add(
-                        $queryBuilder->expr()->eq(
-                            'sys_dmail_group.uid',
-                            $queryBuilder->createNamedParameter($groupUid, Connection::PARAM_INT)
-                        )
-                    )
-                    ->add(
-                        $queryBuilder->expr()->neq(
-                            $table . '.email',
-                            $queryBuilder->createNamedParameter('')
-                        )
-                    )
+                )
             )
             ->orderBy($table . '.uid')
             ->addOrderBy($table . '.email')
@@ -175,56 +166,51 @@ class TempRepository extends MainRepository
      */
     public function getStaticIdList(string $table, int $uid): array
     {
+        $tableSysDmailGroup = 'sys_dmail_group';
+        $tableSysDmailGroupMm = 'sys_dmail_group_mm';
+
         $queryBuilder = $this->getQueryBuilder($table);
 
         $res = $queryBuilder
         ->selectLiteral('DISTINCT ' . $table . '.uid', $table . '.email')
-        ->from('sys_dmail_group_mm', 'sys_dmail_group_mm')
+        ->from($tableSysDmailGroupMm, $tableSysDmailGroupMm)
         ->innerJoin(
-            'sys_dmail_group_mm',
-            'sys_dmail_group',
-            'sys_dmail_group',
+            $tableSysDmailGroupMm,
+            $tableSysDmailGroup,
+            $tableSysDmailGroup,
             $queryBuilder->expr()->eq(
-                'sys_dmail_group_mm.uid_local',
-                $queryBuilder->quoteIdentifier('sys_dmail_group.uid')
+                $tableSysDmailGroupMm . '.uid_local',
+                $queryBuilder->quoteIdentifier($tableSysDmailGroup . '.uid')
             )
         )
         ->innerJoin(
-            'sys_dmail_group_mm',
+            $tableSysDmailGroupMm,
             $table,
             $table,
             $queryBuilder->expr()->eq(
-                'sys_dmail_group_mm.uid_foreign',
+                $tableSysDmailGroupMm . '.uid_foreign',
                 $queryBuilder->quoteIdentifier($table . '.uid')
             )
         )
         ->andWhere(
-            $queryBuilder->expr()->and()
-            ->add(
+            $queryBuilder->expr()->and(
                 $queryBuilder->expr()->eq(
-                    'sys_dmail_group_mm.uid_local',
+                    $tableSysDmailGroupMm . '.uid_local',
                     $queryBuilder->createNamedParameter($uid, Connection::PARAM_INT)
-                )
-            )
-            ->add(
+                ),
                 $queryBuilder->expr()->eq(
-                    'sys_dmail_group_mm.tablenames',
+                    $tableSysDmailGroupMm . '.tablenames',
                     $queryBuilder->createNamedParameter($table)
-                )
-            )
-            ->add(
+                ),
                 $queryBuilder->expr()->neq(
                     $table . '.email',
                     $queryBuilder->createNamedParameter('')
-                )
-            )
-            ->add(
+                ),
                 $queryBuilder->expr()->eq(
-                    'sys_dmail_group.deleted',
+                    $tableSysDmailGroup . '.deleted',
                     $queryBuilder->createNamedParameter(0, Connection::PARAM_INT)
                 )
             )
-            ->add($addWhere ?? '')
         )
         ->orderBy($table . '.uid')
         ->addOrderBy($table . '.email')
@@ -279,25 +265,65 @@ class TempRepository extends MainRepository
         $categories = [];
 
         $mmField = $table == 'sys_dmail_group' ? 'select_categories' : 'module_sys_dmail_category';
+        $tableSysDmailCategory = 'sys_dmail_category';
 
         $pageTsConfig = BackendUtility::getTCEFORM_TSconfig($table, $row);
         if (is_array($pageTsConfig[$mmField])) {
             $pidList = $pageTsConfig[$mmField]['PAGE_TSCONFIG_IDLIST'] ?? [];
             if ($pidList) {
-                $queryBuilder = $this->getQueryBuilder('sys_dmail_category');
-                $res = $queryBuilder->select('*')
-                ->from('sys_dmail_category')
-                ->add('where', 'sys_dmail_category.pid IN (' . str_replace(',', "','", $queryBuilder->createNamedParameter($pidList)) . ')' .
-                    ' AND l18n_parent=0')
-                ->executeQuery();
+                $pidList = GeneralUtility::intExplode(',', $pidList);
+                $queryBuilder = $this->getQueryBuilder($tableSysDmailCategory);
+                $queryBuilder->select('*')
+                ->from($tableSysDmailCategory)
+                ->where(
+                    $queryBuilder->expr()->eq(
+                        'l18n_parent', 
+                        $queryBuilder->createNamedParameter(0, Connection::PARAM_INT)
+                    ),
+                    $queryBuilder->expr()->in(
+                        $tableSysDmailCategory . '.pid',
+                        $queryBuilder->createNamedParameter($pidList, Connection::PARAM_INT_ARRAY)
+                    )
+                );
+
+                $res = $queryBuilder->executeQuery();
+
                 while ($rowCat = $res->fetchAssociative()) {
-                    if ($localizedRowCat = $this->getRecordOverlay('sys_dmail_category', $rowCat, $sysLanguageUid)) {
+                    if ($localizedRowCat = $this->getRecordOverlay($tableSysDmailCategory, $rowCat, $sysLanguageUid)) {
                         $categories[$localizedRowCat['uid']] = htmlspecialchars($localizedRowCat['category']);
                     }
                 }
             }
         }
+
         return $categories;
+    }
+
+    protected function selectByMultipleCondition(
+        string $table, 
+        array $row, 
+        int $sysLanguageUid,
+        array $tcaTable
+    ) {
+        $queryBuilder = $this->getQueryBuilder($table);
+        $queryBuilder->select('*')
+        ->from($table)
+        ->where(
+            $queryBuilder->expr()->eq(
+                'pid', 
+                $queryBuilder->createNamedParameter($row['pid'], Connection::PARAM_INT)
+            ),
+            $queryBuilder->expr()->eq(
+                $tcaTable['ctrl']['languageField'], 
+                $queryBuilder->createNamedParameter($sysLanguageUid, Connection::PARAM_INT)
+            ),
+            $queryBuilder->expr()->eq(
+                $tcaTable['ctrl']['transOrigPointerField'], 
+                $queryBuilder->createNamedParameter($row['uid'], Connection::PARAM_INT)
+            )
+        )
+        ->setMaxResults(1); /* LIMIT 1*/
+        return $queryBuilder->executeQuery()->fetchAssociative();
     }
 
     /**
@@ -307,57 +333,58 @@ class TempRepository extends MainRepository
      *
      * @param string $table Table name
      * @param array $row Record to overlay. Must contain uid, pid and languageField
-     * @param int $sys_language_content Language ID of the content
+     * @param int $sysLanguageUid Language ID of the content
      *
-     * @return mixed Returns the input record, possibly overlaid with a translation.
+     * @return array Returns the input record, possibly overlaid with a translation.
      */
-    public function getRecordOverlay(string $table, array $row, int $sys_language_content)
+    public function getRecordOverlay(
+        string $table,
+        array $row,
+        int $sysLanguageUid): array
     {
         if ($row['uid'] > 0 && $row['pid'] > 0) {
-            if ($GLOBALS['TCA'][$table] && $GLOBALS['TCA'][$table]['ctrl']['languageField'] && $GLOBALS['TCA'][$table]['ctrl']['transOrigPointerField']) {
+            $tcaTable = $GLOBALS['TCA'][$table] ?? false;
+            if ($tcaTable && $tcaTable['ctrl']['languageField'] && $tcaTable['ctrl']['transOrigPointerField']) {
                 // Will try to overlay a record only
-                // if the sys_language_content value is larger that zero.
-                if ($sys_language_content > 0) {
+                // if the sysLanguageUid value is larger that zero.
+                if ($sysLanguageUid > 0) {
                     // Must be default language or [All], otherwise no overlaying:
-                    if ($row[$GLOBALS['TCA'][$table]['ctrl']['languageField']] <= 0) {
+                    if ($row[$tcaTable['ctrl']['languageField']] <= 0) {
                         // Select overlay record:
-                        $queryBuilder = $this->getQueryBuilder($table);
-                        $olrow = $queryBuilder->select('*')
-                        ->from($table)
-                        ->add('where', 'pid=' . (int)$row['pid'] .
-                            ' AND ' . $GLOBALS['TCA'][$table]['ctrl']['languageField'] . '=' . (int)$sys_language_content .
-                            ' AND ' . $GLOBALS['TCA'][$table]['ctrl']['transOrigPointerField'] . '=' . (int)$row['uid'])
-                        ->setMaxResults(1)/* LIMIT 1*/
-                        ->executeQuery()
-                        ->fetchAssociative();
+                        $olrow = $this->selectByMultipleCondition($table, $row, $sysLanguageUid, $tcaTable);
 
                         // Merge record content by traversing all fields:
                         if (is_array($olrow)) {
                             foreach ($row as $fN => $fV) {
                                 if ($fN != 'uid' && $fN != 'pid' && isset($olrow[$fN])) {
-                                    if ($GLOBALS['TCA'][$table]['l10n_mode'][$fN] != 'exclude' && ($GLOBALS['TCA'][$table]['l10n_mode'][$fN] != 'mergeIfNotBlank' || strcmp(trim($olrow[$fN]), ''))) {
+                                    if(!isset($tcaTable['l10n_mode'][$fN]) && strcmp(trim((string)$olrow[$fN]), '')) {
+                                        $row[$fN] = $olrow[$fN];
+                                    }
+                                    elseif (isset($tcaTable['l10n_mode'][$fN]) && $tcaTable['l10n_mode'][$fN] != 'exclude' 
+                                        && ($tcaTable['l10n_mode'][$fN] != 'mergeIfNotBlank' || strcmp(trim((string)$olrow[$fN]), ''))
+                                    ) {
                                         $row[$fN] = $olrow[$fN];
                                     }
                                 }
                             }
                         }
 
-                    // Otherwise, check if sys_language_content is different from the value of the record
+                    // Otherwise, check if sysLanguageUid is different from the value of the record
                     // that means a japanese site might try to display french content.
-                    } elseif ($sys_language_content != $row[$GLOBALS['TCA'][$table]['ctrl']['languageField']]) {
+                    } elseif ($sysLanguageUid != $row[$tcaTable['ctrl']['languageField']]) {
                         unset($row);
                     }
                 } else {
                     // When default language is displayed,
                     // we never want to return a record carrying another language!:
-                    if ($row[$GLOBALS['TCA'][$table]['ctrl']['languageField']] > 0) {
+                    if ($row[$tcaTable['ctrl']['languageField']] > 0) {
                         unset($row);
                     }
                 }
             }
         }
 
-        return $row;
+        return $row ?? [];
     }
 
     /**
@@ -468,36 +495,47 @@ class TempRepository extends MainRepository
         }
     }
 
-    public function seachDMTask()
+    /**
+     * Code from:
+     *  TYPO3\CMS\Scheduler\Domain\Repository\SchedulerTaskRepository getGroupedTasks
+     */
+    public function getDMTasks(): array
     {
         $table = 'tx_scheduler_task';
         $queryBuilder = $this->getQueryBuilder($table);
+        $queryBuilder->getRestrictions()->removeAll();
 
         $searchStrNew = 'directmail:mailingqueue';
-        //@TODO remove in v12
-        $searchStrOld = '\DirectmailScheduler';
 
         $queryBuilder
-            ->select('uid', 'disable', 'description', 'nextexecution', 'lastexecution_time', 'lastexecution_failure', 'lastexecution_context', 'serialized_task_object', 'serialized_executions')
-            ->from($table)
+            ->select('t.*')
+            ->addSelect(
+                'g.groupName AS taskGroupName',
+                'g.description AS taskGroupDescription',
+                'g.uid AS taskGroupId',
+                'g.deleted AS isTaskGroupDeleted',
+                'g.hidden AS isTaskGroupHidden',
+            )
+            ->from($table, 't')
+            ->leftJoin(
+                't',
+                'tx_scheduler_task_group',
+                'g',
+                $queryBuilder->expr()->eq('t.task_group', $queryBuilder->quoteIdentifier('g.uid'))
+            )
             ->where(
                 $queryBuilder->expr()->like(
-                    'serialized_task_object',
+                    't.serialized_task_object',
                     $queryBuilder->createNamedParameter('%' . $queryBuilder->escapeLikeWildcards($searchStrNew) . '%')
-                )
-            )
-            ->orWhere(
-                $queryBuilder->expr()->like(
-                    'serialized_task_object',
-                    $queryBuilder->createNamedParameter('%' . $queryBuilder->escapeLikeWildcards($searchStrOld) . '%')
                 )
             )
             ->andWhere(
                 $queryBuilder->expr()->eq(
-                    'deleted',
+                    't.deleted',
                     $queryBuilder->createNamedParameter(0, Connection::PARAM_INT)
                 )
-            );
+            )
+            ->orderBy('g.sorting');
 
         return $queryBuilder->executeQuery()->fetchAllAssociative();
     }

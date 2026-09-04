@@ -4,27 +4,22 @@ $EM_CONF[$_EXTKEY] = [
     'title' => 'Direct Mail',
     'description' => 'Advanced Direct Mail/Newsletter mailer system with sophisticated options for personalization of emails including response statistics.',
     'category' => 'module',
-    'author' => 'Ivan Kartolo',
-    'author_email' => 'ivan.kartolo@dkd.de',
-    'author_company' => 'd.k.d Internet Service GmbH',
+    'author' => 'Beech.it',
+    'author_email' => 'support@beech.it',
+    'author_company' => 'Beech IT',
     'state' => 'stable',
-    'clearcacheonload' => 0,
-    'version' => '9.5.2',
+    'version' => '13.0.0',
     'constraints' => [
         'depends' => [
-            'typo3' => '11.5.0-11.99.99',
-            'lowlevel' => '11.5.0-11.99.99',
-            'tt_address' => '6.0.0-8.0.99',
-            'php' => '7.4.0-8.1.99',
-            'jumpurl' => '8.0.3-',
-            'rdct' => '2.1.0',
+            'typo3' => '13.4.0-13.4.99',
+            'lowlevel' => '13.4.0-13.99.99',
+            'tt_address' => '9.0.0-9.0.99',
+            'php' => '8.2.0-8.5.99',
         ],
         'conflicts' => [
         ],
         'suggests' => [
         ],
-    ],
-    'suggests' => [
     ],
     'autoload' => [
         'psr-4' => [

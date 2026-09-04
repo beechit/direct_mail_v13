@@ -47,19 +47,15 @@ class TsUtility
      * @param int $id Page id
      * @param array $pageTs Page TS array to write
      * @param string $tsConfPrefix Prefix for object paths
-     * @param array|string $impParams [Description needed.]
      *
      *
      * @see implodeTSParams(), getPagesTSconfig()
      */
-    public function updatePagesTSconfig(int $id, array $pageTs, string $tsConfPrefix, $impParams = '')
+    public function updatePagesTSconfig(int $id, array $pageTs, string $tsConfPrefix): bool
     {
         $done = false;
-        $id = (int)$id;
         if (is_array($pageTs) && $id > 0) {
-            if (!is_array($impParams)) {
-                $impParams = $this->implodeTSParams(BackendUtility::getPagesTSconfig($id));
-            }
+            $impParams = $this->implodeTSParams(BackendUtility::getPagesTSconfig($id));
             $set = [];
             foreach ($pageTs as $f => $v) {
                 // only get the first line of input and ignore the rest
@@ -100,7 +96,7 @@ class TsUtility
 
                 // store those changes
                 $tsConf = implode(LF, $tsLines);
-                $done = GeneralUtility::makeInstance(PagesRepository::class)->updatePageTSconfig((int)$id, $tsConf);
+                $done = (bool)GeneralUtility::makeInstance(PagesRepository::class)->updatePageTSconfig((int)$id, $tsConf);
             }
         }
 

@@ -8,49 +8,74 @@ use DirectMailTeam\DirectMail\Dmailer;
 use DirectMailTeam\DirectMail\Repository\SysDmailMaillogRepository;
 use DirectMailTeam\DirectMail\Repository\SysDmailRepository;
 use DirectMailTeam\DirectMail\Utility\SchedulerUtility;
-use DirectMailTeam\DirectMail\Utility\Typo3ConfVarsUtility;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use TYPO3\CMS\Backend\Routing\Exception\RouteNotFoundException;
+use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
+use TYPO3\CMS\Backend\Template\ModuleTemplate;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
-use TYPO3\CMS\Core\Http\HtmlResponse;
-use TYPO3\CMS\Core\Imaging\Icon;
+use TYPO3\CMS\Core\Imaging\IconFactory;
+use TYPO3\CMS\Core\Imaging\IconSize;
+use TYPO3\CMS\Core\Localization\LanguageService;
+use TYPO3\CMS\Core\Messaging\FlashMessageQueue;
+use TYPO3\CMS\Core\Pagination\ArrayPaginator;
+use TYPO3\CMS\Core\Type\Bitmask\Permission;
+use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 
-class MailerEngineController extends MainController
+final class MailerEngineController extends MainController
 {
-    /**
-     * for cmd == 'delete'
-     * @var int
-     */
-    protected int $uid = 0;
 
-    protected bool $invokeMailerEngine = false;
+    protected FlashMessageQueue $flashMessageQueue;
 
-    /**
-     * The name of the module
-     *
-     * @var string
-     */
-    protected $moduleName = 'DirectMailNavFrame_MailerEngine';
+    public function __construct(
+        protected readonly ModuleTemplateFactory $moduleTemplateFactory,
+        protected readonly IconFactory $iconFactory,
 
-    protected function initMailerEngine(ServerRequestInterface $request): void
+        protected readonly string $moduleName = 'directmail_module_mailerengine',
+        protected readonly string $lllFile = 'LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf',
+
+        protected ?LanguageService $languageService = null,
+
+        protected array $pageinfo = [],
+        protected int $id = 0,
+        protected int $uid = 0, //for cmd == 'delete'
+        protected int $currentPageNumber = 1,
+        protected bool $access = false,
+        protected bool $invokeMailerEngine = false,
+        protected string $cmd = '',
+        // ...
+    ) {
+    }
+
+    public function handleRequest(ServerRequestInterface $request): ResponseInterface
     {
+        $this->languageService = $this->getLanguageService();
+        $this->flashMessageQueue = $this->getFlashMessageQueue('MailerEngineQueue');
+
         $queryParams = $request->getQueryParams();
         $parsedBody = $request->getParsedBody();
 
+        $this->id = (int)($parsedBody['id'] ?? $queryParams['id'] ?? 0);
         $this->uid = (int)($parsedBody['uid'] ?? $queryParams['uid'] ?? 0);
+        $this->cmd = (string)($parsedBody['cmd'] ?? $queryParams['cmd'] ?? '');
         $this->invokeMailerEngine = (bool)($queryParams['invokeMailerEngine'] ?? false);
+        $this->currentPageNumber = (int)($queryParams['currentPageNumber'] ?? 1);
+        $this->currentPageNumber = $this->currentPageNumber > 0 ? $this->currentPageNumber : 1;
+        $permsClause = $this->getBackendUser()->getPagePermsClause(Permission::PAGE_SHOW);
+        $pageAccess = BackendUtility::readPageAccess($this->id, $permsClause);
+        $this->pageinfo = is_array($pageAccess) ? $pageAccess : [];
+        $this->access = is_array($this->pageinfo) ? true : false;
+
+        $moduleTemplate = $this->moduleTemplateFactory->create($request);
+        return $this->indexAction($moduleTemplate);
     }
 
-    public function indexAction(ServerRequestInterface $request): ResponseInterface
+    public function indexAction(ModuleTemplate $view): ResponseInterface
     {
-        $this->view = $this->configureTemplatePaths('MailerEngine');
-
-        $this->init($request);
-        $this->initMailerEngine($request);
-
         if (($this->id && $this->access) || ($this->isAdmin() && !$this->id)) {
+
             $module = $this->getModulName();
 
             if ($module == 'dmail') {
@@ -62,10 +87,27 @@ class MailerEngineController extends MainController
                 if (($this->pageinfo['doktype'] ?? 0) == 254) {
                     $mailerEngine = $this->mailerengine();
 
-                    $this->view->assignMultiple(
+                    $itemsPerPage = 100; //@TODO
+                    $paginator = GeneralUtility::makeInstance(
+                        ArrayPaginator::class,
+                        $mailerEngine['data'],
+                        $this->currentPageNumber,
+                        $itemsPerPage
+                    );
+
+                    $tasks = $this->getSchedulerTable();
+                    $view->assignMultiple(
                         [
-                            'schedulerTable' => $this->getSchedulerTable(),
+                            'tasks' => $tasks['taskGroupsWithTasks'],
                             'data' => $mailerEngine['data'],
+                            'pagination' => [
+                                'numberOfPages' => $paginator->getNumberOfPages(),
+                                'currentPageNumber' => $paginator->getCurrentPageNumber(),
+                                'keyOfFirstPaginatedItem' => $paginator->getKeyOfFirstPaginatedItem(),
+                                'keyOfLastPaginatedItem' => $paginator->getKeyOfLastPaginatedItem(),
+                                'paginatedItems' => $paginator->getPaginatedItems(),
+                                'links' =>  array_fill(0, $paginator->getNumberOfPages(), '')
+                            ],
                             'id' => $this->id,
                             'invoke' => $mailerEngine['invoke'],
                             'moduleName' => $this->moduleName,
@@ -74,38 +116,47 @@ class MailerEngineController extends MainController
                         ]
                     );
                 } elseif ($this->id != 0) {
-                    $message = $this->createFlashMessage($this->getLanguageService()->getLL('dmail_noRegular'), $this->getLanguageService()->getLL('dmail_newsletters'), 1, false);
-                    $this->messageQueue->addMessage($message);
+                    $message = $this->createFlashMessage(
+                        $this->languageService->sL($this->lllFile . ':dmail_noRegular'),
+                        $this->languageService->sL($this->lllFile . ':dmail_newsletters'),
+                        ContextualFeedbackSeverity::WARNING,
+                        false
+                    );
+                    $this->flashMessageQueue->addMessage($message);
                 }
             } else {
-                $message = $this->createFlashMessage($this->getLanguageService()->getLL('select_folder'), $this->getLanguageService()->getLL('header_mailer'), 1, false);
-                $this->messageQueue->addMessage($message);
-                $this->view->assignMultiple(
+                $message = $this->createFlashMessage(
+                    $this->languageService->sL($this->lllFile . ':select_folder'),
+                    $this->languageService->sL($this->lllFile . ':header_mailer'),
+                    ContextualFeedbackSeverity::WARNING,
+                    false
+                );
+                $this->flashMessageQueue->addMessage($message);
+                $view->assignMultiple(
                     [
                         'dmLinks' => $this->getDMPages($this->moduleName),
                     ]
                 );
             }
         } else {
-            // If no access or if ID == zero
-            $this->view = $this->configureTemplatePaths('NoAccess');
-            $message = $this->createFlashMessage('If no access or if ID == zero', 'No Access', 1, false);
-            $this->messageQueue->addMessage($message);
+            $message = $this->createFlashMessage(
+                $this->languageService->sL($this->lllFile . ':mod.main.no_access'),
+                $this->languageService->sL($this->lllFile . ':mod.main.no_access.title'),
+                ContextualFeedbackSeverity::WARNING,
+                false
+            );
+            $this->flashMessageQueue->addMessage($message);
+            return $view->renderResponse('NoAccess');
         }
 
-        /**
-         * Render template and return html content
-         */
-        $this->moduleTemplate->setContent($this->view->render());
-        return new HtmlResponse($this->moduleTemplate->renderContent());
+        return $view->renderResponse('MailerEngine');
     }
 
     protected function getSchedulerTable(): array
     {
-        $schedulerTable = [];
+        $schedulerTable = ['taskGroupsWithTasks' => [], 'errorClasses' => []];
         if (ExtensionManagementUtility::isLoaded('scheduler')) {
-            $this->getLanguageService()->includeLLFile('EXT:scheduler/Resources/Private/Language/locallang.xlf');
-            $schedulerTable = SchedulerUtility::getDMTable($this->getLanguageService());
+            $schedulerTable = SchedulerUtility::getDMTable();
         }
         return $schedulerTable;
     }
@@ -114,7 +165,7 @@ class MailerEngineController extends MainController
      * Shows the status of the mailer engine.
      * TODO: Should really only show some entries, or provide a browsing interface.
      *
-     * @return	string		List of the mailing status
+     * @return array		List of the mailing status
      * @throws RouteNotFoundException If the named route doesn't exist
      */
     protected function mailerengine(): array
@@ -127,14 +178,19 @@ class MailerEngineController extends MainController
 
         if ($enableTrigger && $this->invokeMailerEngine) {
             $this->invokeMEngine();
-            $message = $this->createFlashMessage('', $this->getLanguageService()->getLL('dmail_mailerengine_invoked'), -1, false);
-            $this->messageQueue->addMessage($message);
+            $message = $this->createFlashMessage(
+                '',
+                $this->languageService->sL($this->lllFile . ':dmail_mailerengine_invoked'),
+                ContextualFeedbackSeverity::INFO,
+                false
+            );
+            $this->flashMessageQueue->addMessage($message);
         }
 
         // Invoke engine
         if ($enableTrigger) {
             $moduleUrl = $this->buildUriFromRoute(
-                'DirectMailNavFrame_MailerEngine',
+                $this->moduleName,
                 [
                     'id' => $this->id,
                     'invokeMailerEngine' => 1,
@@ -150,7 +206,7 @@ class MailerEngineController extends MainController
             foreach ($rows as $row) {
                 $data[] = [
                     'uid'             => $row['uid'],
-                    'icon'            => $this->iconFactory->getIconForRecord('sys_dmail', $row, Icon::SIZE_SMALL)->render(),
+                    'icon'            => $this->iconFactory->getIconForRecord('sys_dmail', $row, IconSize::SMALL)->render(),
                     'subject'         => $this->linkDMailRecord(htmlspecialchars(GeneralUtility::fixed_lgd_cs($row['subject'], 100)), $row['uid']),
                     'scheduled'       => BackendUtility::datetime($row['scheduled']),
                     'scheduled_begin' => $row['scheduled_begin'] ? BackendUtility::datetime($row['scheduled_begin']) : '',

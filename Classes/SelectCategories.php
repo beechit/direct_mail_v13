@@ -15,11 +15,8 @@ namespace DirectMailTeam\DirectMail;
  * The TYPO3 project - inspiring people to share!
  */
 
-use DirectMailTeam\DirectMail\Repository\SysLanguageRepository;
 use DirectMailTeam\DirectMail\Repository\TempRepository;
-use TYPO3\CMS\Core\Domain\Repository\PageRepository;
 use TYPO3\CMS\Core\Localization\LanguageService;
-use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 /**
@@ -32,25 +29,20 @@ class SelectCategories
     /**
      * Get the localization of the select field items (right-hand part of form)
      * Referenced by TCA
-     * https://docs.typo3.org/m/typo3/reference-tca/11.5/en-us/ColumnsConfig/CommonProperties/ItemsProcFunc.html
+     * https://docs.typo3.org/m/typo3/reference-tca/12.4/en-us/ColumnsConfig/CommonProperties/ItemsProcFunc.html
      *
      * @param	array $params Array of searched translation
      */
     public function getLocalizedCategories(array &$params): void
     {
-        $sys_language_uid = 0;
+        $sysLanguageUid = 0;
         $lang = $this->getLang();
-        if ($lang && ExtensionManagementUtility::isLoaded('static_info_tables')) {
-            $sysPage = GeneralUtility::makeInstance(PageRepository::class);
-            $rows = GeneralUtility::makeInstance(SysLanguageRepository::class)->selectSysLanguageForSelectCategories(
-                $lang,
-                $sysPage->enableFields('sys_language'),
-                $sysPage->enableFields('static_languages')
-            );
-            if (is_array($rows)) {
-                foreach ($rows as $row) {
-                    $sys_language_uid = (int)$row['uid'];
-                }
+
+        $site = $params['site'];
+        $languages = $site->getAllLanguages();
+        foreach($languages as $language) {
+            if($language->getLocale()->getLanguageCode() == $lang) {
+                $sysLanguageUid = $language->getLanguageId();
             }
         }
 
@@ -61,8 +53,10 @@ class SelectCategories
                 $rows = $tempRepository->selectRowsByUid($table, (int)$item[1]);
                 if (is_array($rows)) {
                     foreach ($rows as $rowCat) {
-                        if ($localizedRowCat = $tempRepository->getRecordOverlay($table, $rowCat, $sys_language_uid)) {
-                            $params['items'][$k][0] = $localizedRowCat['category'];
+                        if ($localizedRowCat = $tempRepository->getRecordOverlay($table, $rowCat, $sysLanguageUid)) {
+                            if(count($localizedRowCat)) {
+                                $params['items'][$k][0] = $localizedRowCat['category'];
+                            }
                         }
                     }
                 }

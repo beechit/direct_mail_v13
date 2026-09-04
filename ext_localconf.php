@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 defined('TYPO3') || die();
 
-// https://docs.typo3.org/m/typo3/reference-coreapi/11.5/en-us/ExtensionArchitecture/BestPractises/ConfigurationFiles.html
+// https://docs.typo3.org/m/typo3/reference-coreapi/12.4/en-us/ExtensionArchitecture/BestPractises/ConfigurationFiles.html
 (function () {
     // Register hook for simulating a user group
     $GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['tslib/class.tslib_fe.php']['hook_checkEnableFields']['direct_mail'] = 'DirectMailTeam\\DirectMail\\Hooks\\TypoScriptFrontendController->simulateUsergroup';
@@ -54,8 +54,9 @@ defined('TYPO3') || die();
      */
     $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['direct_mail']['UseImplicitPortToFetch'] = $extConf['UseImplicitPortToFetch'];
 
-    $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['direct_mail']['SSLVerifyPeer'] = $extConf['SSLVerifyPeer'];
-    $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['direct_mail']['SSLVerifyPeerName'] = $extConf['SSLVerifyPeerName'];
+    $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['direct_mail']['SSLVerify'] = $extConf['SSLVerify'] ?? 0;
+    $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['direct_mail']['SSLVerifyPeer'] = $extConf['SSLVerifyPeer'] ?? 1;
+    $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['direct_mail']['SSLVerifyPeerName'] = $extConf['SSLVerifyPeerName'] ?? 1;
 
     /**
      * Registering class to scheduler
@@ -81,11 +82,6 @@ defined('TYPO3') || die();
         'additionalFields' => 'DirectMailTeam\\DirectMail\\Scheduler\\AnalyzeBounceMailAdditionalFields',
     ];
 
-    \TYPO3\CMS\Core\Utility\ExtensionManagementUtility::addUserTSConfig(
-        "@import 'EXT:direct_mail/Configuration/TSconfig/options.tsconfig'"
-    );
-    \TYPO3\CMS\Core\Utility\ExtensionManagementUtility::addTypoScriptSetup(
-        "@import 'EXT:direct_mail/Configuration/TSconfig/page.tsconfig'"
-    );
-
+    // https://docs.typo3.org/c/typo3/cms-core/main/en-us/Changelog/12.3/Feature-100232-LoadAdditionalStylesheetsInTYPO3Backend.html
+    $GLOBALS['TYPO3_CONF_VARS']['BE']['stylesheets']['direct_mail'] = 'EXT:direct_mail/Resources/Public/StyleSheets/';
 })();

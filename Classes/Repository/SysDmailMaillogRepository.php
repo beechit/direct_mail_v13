@@ -112,11 +112,11 @@ class SysDmailMaillogRepository extends MainRepository
                 $queryBuilder->createNamedParameter($mid, Connection::PARAM_INT)
             ),
             $queryBuilder->expr()->eq(
-                'sys_dmail_maillog.response_type',
+                $this->table . '.response_type',
                 $queryBuilder->createNamedParameter(0, Connection::PARAM_INT)
             ),
             $queryBuilder->expr()->gt(
-                'sys_dmail_maillog.html_sent',
+                $this->table . '.html_sent',
                 $queryBuilder->createNamedParameter(0, Connection::PARAM_INT)
             )
         )
@@ -709,7 +709,7 @@ class SysDmailMaillogRepository extends MainRepository
             ])
             ->executeStatement();
 
-        return (int)$queryBuilder->getConnection()->lastInsertId($this->table);
+        return (int)$queryBuilder->getConnection()->lastInsertId();
     }
 
     public function analyzeBounceMailAddToMailLog(
@@ -733,7 +733,7 @@ class SysDmailMaillogRepository extends MainRepository
             ])
             ->executeStatement();
 
-        return (int)$queryBuilder->getConnection()->lastInsertId($this->table);
+        return (int)$queryBuilder->getConnection()->lastInsertId();
     }
 
     /**
