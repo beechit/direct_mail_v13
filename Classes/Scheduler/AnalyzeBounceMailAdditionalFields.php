@@ -104,8 +104,8 @@ class AnalyzeBounceMailAdditionalFields extends AbstractAdditionalFieldProvider
      */
     public function validateAdditionalFields(array &$submittedData, SchedulerModuleController $schedulerModule)
     {
-        // check if PHP IMAP is installed
-        if (extension_loaded('imap')) {
+        // check if PHP IMAP is installed or polyfilled
+        if (extension_loaded('imap') || function_exists('imap_open')) {
             // check if we can connect using the given data
             /** @var Server $mailServer */
             $mailServer = GeneralUtility::makeInstance(

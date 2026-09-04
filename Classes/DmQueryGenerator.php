@@ -15,10 +15,17 @@ namespace DirectMailTeam\DirectMail;
  * The TYPO3 project - inspiring people to share!
  */
 
+use Doctrine\DBAL\Exception as DBALException;
 use Psr\Http\Message\ServerRequestInterface;
+use TYPO3\CMS\Backend\Routing\UriBuilder;
+use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
+use TYPO3\CMS\Core\DataHandling\PageDoktypeRegistry;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Http\ServerRequest;
+use TYPO3\CMS\Core\Imaging\IconFactory;
+use TYPO3\CMS\Core\Messaging\FlashMessageRendererResolver;
+use TYPO3\CMS\Core\Schema\TcaSchemaFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Lowlevel\Database\QueryGenerator;
 use TYPO3\CMS\Lowlevel\Controller\DatabaseIntegrityController;
 
 /**
@@ -30,6 +37,24 @@ use TYPO3\CMS\Lowlevel\Controller\DatabaseIntegrityController;
 class DmQueryGenerator extends DatabaseIntegrityController
 {
     protected array $allowedTables = ['tt_address', 'fe_users'];
+
+    public function __construct(
+        ?IconFactory $iconFactory = null,
+        ?UriBuilder $uriBuilder = null,
+        ?ModuleTemplateFactory $moduleTemplateFactory = null,
+        ?TcaSchemaFactory $tcaSchemaFactory = null,
+        ?FlashMessageRendererResolver $flashMessageRendererResolver = null,
+        ?PageDoktypeRegistry $pageDoktypeRegistry = null
+    ) {
+        parent::__construct(
+            $iconFactory ?? GeneralUtility::makeInstance(IconFactory::class),
+            $uriBuilder ?? GeneralUtility::makeInstance(UriBuilder::class),
+            $moduleTemplateFactory ?? GeneralUtility::makeInstance(ModuleTemplateFactory::class),
+            $tcaSchemaFactory ?? GeneralUtility::makeInstance(TcaSchemaFactory::class),
+            $flashMessageRendererResolver ?? GeneralUtility::makeInstance(FlashMessageRendererResolver::class),
+            $pageDoktypeRegistry ?? GeneralUtility::makeInstance(PageDoktypeRegistry::class)
+        );
+    }
 
     public function mkTableSelect(string $name, string $cur): string
     {
@@ -89,8 +114,8 @@ class DmQueryGenerator extends DatabaseIntegrityController
                     $fullQueryString = $selectQueryString;
                     $dataRows = $connection->executeQuery($selectQueryString)->fetchAllAssociative();
                     //$output .= '<h2>SQL query</h2><div><code>' . htmlspecialchars($fullQueryString) . '</code></div>';
-                    $cPR = $this->getQueryResultCode($mQ, $dataRows, $this->table);
-                    $output .= '<h2>' . ($cPR['header'] ?? '') . '</h2><div>' . $cPR['content'] . '</div>';
+                    $cPR = $this->getQueryResultCode($mQ, $dataRows, $this->table, $request);
+                    $output .= '<h2>' . ($cPR['header'] ?? '') . '</h2><div>' . ($cPR['content'] ?? '') . '</div>';
                 } catch (DBALException $e) {
                     $output .= '<h2>SQL query</h2><div><code>' . htmlspecialchars($fullQueryString) . '</code></div>';
                     $out = '<p><strong>Error: <span class="text-danger">'
@@ -103,20 +128,21 @@ class DmQueryGenerator extends DatabaseIntegrityController
         return ['<div class="database-query-builder">' . $output . '</div>', $selectQueryString];
     }
 
-    public function getQueryDM(bool $queryLimitDisabled): string
+    public function getQueryDM(bool $queryLimitDisabled, ?ServerRequestInterface $request = null): string
     {
+        $request = $request ?? $GLOBALS['TYPO3_REQUEST'] ?? new ServerRequest();
         $selectQueryString = '';
-        $this->init('queryConfig', $this->settings['queryTable'] ?? '', '', $this->settings);
+        $this->init('queryConfig', $this->MOD_SETTINGS['queryTable'] ?? '', '', $this->MOD_SETTINGS);
         if ($this->formName) {
             $this->setFormName($this->formName);
         }
-        $tmpCode = $this->makeSelectorTable($this->settings, 'query,limit');
+        $tmpCode = $this->makeSelectorTable($this->MOD_SETTINGS, $request);
         if ($this->table && is_array($GLOBALS['TCA'][$this->table])) {
-            if ($this->settings['search_query_makeQuery']) {
+            if ($this->MOD_SETTINGS['search_query_makeQuery'] ?? false) {
                 // Show query
                 $this->enablePrefix = true;
                 $queryString = $this->getQuery($this->queryConfig);
-                if($queryLimitDisabled) {
+                if ($queryLimitDisabled) {
                     $this->extFieldLists['queryLimit'] = '';
                 }
                 $selectQueryString = $this->getSelectQuery($queryString);

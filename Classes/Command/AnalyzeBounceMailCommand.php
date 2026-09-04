@@ -81,8 +81,8 @@ class AnalyzeBounceMailCommand extends Command
         $password = '';
         $type = '';
         $count = 0;
-        // check if PHP IMAP is installed
-        if (!extension_loaded('imap')) {
+        // check if PHP IMAP is installed or polyfilled
+        if (!extension_loaded('imap') && !function_exists('imap_open')) {
             $io->error($this->languageService->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf:scheduler.bounceMail.phpImapError'));
             return Command::FAILURE;
         }
@@ -195,7 +195,7 @@ class AnalyzeBounceMailCommand extends Command
                     (int)$cp['reason'],
                     serialize($cp)
                 );
-            } catch (\Doctrine\DBAL\DBALException $e) {
+            } catch (\Doctrine\DBAL\Exception $e) {
                 // Log $e->getMessage();
                 return false;
             }

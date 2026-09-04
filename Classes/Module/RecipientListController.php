@@ -67,7 +67,7 @@ final class RecipientListController extends MainController
         protected array $indata = [],
 
 
-        protected $requestUri = '',
+        protected string $requestUri = '',
 
         protected array $allowedTables = [DmailRecipientEnum::TtAddress->value, DmailRecipientEnum::FeUsers->value],
 

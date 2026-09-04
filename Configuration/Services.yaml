@@ -8,17 +8,26 @@ services:
     resource: '../Classes/*'
 
   DirectMailTeam\DirectMail\Module\ConfigurationController:
+    public: true
     tags: ['backend.controller']
   DirectMailTeam\DirectMail\Module\DmailController:
+    public: true
     tags: ['backend.controller']
   DirectMailTeam\DirectMail\Module\ImporterController:
+    public: true
     tags: ['backend.controller']
   DirectMailTeam\DirectMail\Module\MailerEngineController:
+    public: true
     tags: ['backend.controller']
   DirectMailTeam\DirectMail\Module\RecipientListController:
+    public: true
     tags: ['backend.controller']
   DirectMailTeam\DirectMail\Module\StatisticsController:
+    public: true
     tags: ['backend.controller']
+
+  DirectMailTeam\DirectMail\DmQueryGenerator:
+    public: true
 
   DirectMailTeam\DirectMail\Command\InvokeMailerEngineCommand:
     tags:

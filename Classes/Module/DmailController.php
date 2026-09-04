@@ -412,7 +412,7 @@ final class DmailController extends MainController
 
                         // add attachment here, since attachment added in 2nd step
                         $unserializedMailContent = unserialize(base64_decode($row['mailContent'] ?: ''));
-                        $temp = $this->compileQuickMail($row, $unserializedMailContent['plain']['content'] ?? '', false);
+                        $temp = $this->compileQuickMail($row, $unserializedMailContent['plain']['content'] ?? '');
                         if ($temp['errorTitle']) {
                             $this->flashMessageQueue->addMessage($this->createFlashMessage($temp['errorText'], $temp['errorTitle'], ContextualFeedbackSeverity::ERROR, false));
                         }
@@ -637,7 +637,7 @@ final class DmailController extends MainController
                     $plainIcon = $this->iconFactory->getIcon('directmail-dmail-preview-text', IconSize::SMALL, $langIconOverlay);
                     $createIcon = $this->iconFactory->getIcon('directmail-dmail-new', IconSize::SMALL, $langIconOverlay);
 
-                    $attributes = PreviewUriBuilder::create($row['uid'], '')
+                    $attributes = PreviewUriBuilder::create((int)$row['uid'])
                         ->withRootLine(BackendUtility::BEgetRootLine($row['uid']))
                         //->withSection('')
                         ->withAdditionalQueryParameters($htmlParams)
@@ -652,7 +652,7 @@ final class DmailController extends MainController
 
                     $previewHTMLLink .= '<a ' . $serializedAttributes . '>' . $htmlIcon . '</a>';
 
-                    $attributes = PreviewUriBuilder::create($row['uid'], '')
+                    $attributes = PreviewUriBuilder::create((int)$row['uid'])
                         ->withRootLine(BackendUtility::BEgetRootLine($row['uid']))
                         //->withSection('')
                         ->withAdditionalQueryParameters($plainParams)
@@ -783,6 +783,7 @@ final class DmailController extends MainController
             '',
             trim($GLOBALS['TCA']['sys_dmail']['ctrl']['default_sortby'])
         );
+        $ascDesc = 'ASC';
         if (!empty($sOrder)) {
             if (substr_count($sOrder, 'ASC') > 0) {
                 $sOrder = trim(str_replace('ASC', '', $sOrder));

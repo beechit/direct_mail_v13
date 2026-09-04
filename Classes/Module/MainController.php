@@ -34,7 +34,7 @@ use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Fluid\View\StandaloneView;
 
-class MainController
+abstract class MainController
 {
     /**
      * ModuleTemplate Container
@@ -53,6 +53,8 @@ class MainController
     protected int $sys_dmail_uid = 0;
     protected string $pages_uid = '';
     protected bool $updatePageTree = false;
+    protected readonly string $moduleName;
+    protected string $requestUri = '';
 
     protected $params = [];
 

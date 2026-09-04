@@ -27,6 +27,7 @@ use TYPO3\CMS\Core\Messaging\FlashMessage;
 use TYPO3\CMS\Core\Messaging\FlashMessageRendererResolver;
 use TYPO3\CMS\Core\Resource\FileReference;
 use TYPO3\CMS\Core\Resource\FileRepository;
+use TYPO3\CMS\Core\Site\SiteFinder;
 use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\MathUtility;
@@ -301,7 +302,7 @@ class DirectMailUtility
     public static function getFullUrlsForDirectMailRecord(array $row): array
     {
         // Finding the domain to use
-        if (!$_SERVER['HTTP_HOST']) {
+        if (empty($_SERVER['HTTP_HOST'])) {
             // In CLI / Scheduler context, $_SERVER['HTTP_HOST'] can be null
             $siteFinder = GeneralUtility::makeInstance(SiteFinder::class);
             $site = $siteFinder->getSiteByPageId((int)$row['page']);
