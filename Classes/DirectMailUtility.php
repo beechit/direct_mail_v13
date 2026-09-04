@@ -21,6 +21,7 @@ use DirectMailTeam\DirectMail\Utility\FetchUtility;
 use DirectMailTeam\DirectMail\Utility\RdctUtility;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
+use TYPO3\CMS\Core\Http\ServerRequest;
 use TYPO3\CMS\Core\Localization\LanguageService;
 use TYPO3\CMS\Core\Localization\LanguageServiceFactory;
 use TYPO3\CMS\Core\Messaging\FlashMessage;
@@ -97,6 +98,17 @@ class DirectMailUtility
     ): string {
         $typolinkPageUrl = 't3://page?uid=';
         $cObj = GeneralUtility::makeInstance(ContentObjectRenderer::class);
+        $request = $GLOBALS['TYPO3_REQUEST'] ?? new \TYPO3\CMS\Core\Http\ServerRequest();
+        $pageId = (int)$parameter;
+        if ($pageId > 0 && !$request->getAttribute('site')) {
+            try {
+                $site = GeneralUtility::makeInstance(SiteFinder::class)->getSiteByPageId($pageId);
+                $request = $request->withAttribute('site', $site);
+            } catch (\Throwable) {
+                // Ignore if site not found
+            }
+        }
+        $cObj->setRequest($request);
 
         return $cObj->typolink_URL([
             'parameter' => $typolinkPageUrl . $parameter,

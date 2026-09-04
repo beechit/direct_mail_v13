@@ -37,7 +37,7 @@ class MailFromDraft extends AbstractTask
 {
     public int $draftUid = 0;
 
-    protected int $dmailUid = 0;
+    public int $dmailUid = 0;
 
     protected array $hookObjects = [];
 

@@ -6,11 +6,10 @@ defined('TYPO3') || die();
 $ttAddressCols = [
     'module_sys_dmail_category' => [
         'label' => 'LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:module_sys_dmail_group.category',
-        'exclude' => '1',
+        'exclude' => true,
         'config' => [
             'type' => 'select',
             'renderType' => 'selectCheckBox',
-            'renderMode' => 'checkbox',
             'foreign_table' => 'sys_dmail_category',
             // TCEFORM.tt_address.module_sys_dmail_category.PAGE_TSCONFIG_IDLIST = ids
             'foreign_table_where' => 'AND sys_dmail_category.l18n_parent=0 AND sys_dmail_category.pid IN (###PAGE_TSCONFIG_IDLIST###) ORDER BY sys_dmail_category.sorting',
@@ -27,7 +26,7 @@ $ttAddressCols = [
     ],
     'module_sys_dmail_html' => [
         'label' => 'LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:module_sys_dmail_group.htmlemail',
-        'exclude' => '1',
+        'exclude' => true,
         'config' => [
             'type' => 'check',
         ],

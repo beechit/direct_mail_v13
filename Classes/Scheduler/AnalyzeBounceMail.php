@@ -15,20 +15,17 @@ namespace DirectMailTeam\DirectMail\Scheduler;
  * The TYPO3 project - inspiring people to share!
  */
 
-use DirectMailTeam\DirectMail\Repository\SysDmailMaillogRepository;
-use DirectMailTeam\DirectMail\Utility\ReadmailUtility;
-use Fetch\Message;
-use Fetch\Server;
-use TYPO3\CMS\Core\Context\Context;
-use TYPO3\CMS\Core\Database\Connection;
-use TYPO3\CMS\Core\Database\ConnectionPool;
+use DirectMailTeam\DirectMail\Command\AnalyzeBounceMailCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Scheduler\Task\AbstractTask;
 
 /**
  * Class AnalyzeBounceMail
+ *
  * @author Ivan Kartolo <ivan.kartolo@gmail.com>
- * @deprecated will be removed in TYPO3 v12.0. Use AnalyzeBounceMailCommand instead.
  */
 class AnalyzeBounceMail extends AbstractTask
 {
@@ -165,142 +162,36 @@ class AnalyzeBounceMail extends AbstractTask
     }
 
     /**
-     * execute the scheduler task.
+     * execute the scheduler task using AnalyzeBounceMailCommand.
      *
      * @return bool
      */
-    public function execute()
+    public function execute(): bool
     {
-        trigger_error(
-            'will be removed in TYPO3 v12.0. Use AnalyzeBounceMailCommand instead.',
-            E_USER_DEPRECATED
-        );
-        // try connect to mail server
-        $mailServer = $this->connectMailServer();
-        if ($mailServer instanceof Server) {
-            // we are connected to mail server
-            // get unread mails
-            $messages = $mailServer->search('UNSEEN', $this->maxProcessed);
-            /** @var Message $message The message object */
-            foreach ($messages as $message) {
-                // process the mail
-                if ($this->processBounceMail($message)) {
-                    // set delete
-                    $message->delete();
-                } else {
-                    $message->setFlag('SEEN');
-                }
-            }
-
-            // expunge to delete permanently
-            $mailServer->expunge();
-            imap_close($mailServer->getImapStream());
-            return true;
+        $command = GeneralUtility::makeInstance(AnalyzeBounceMailCommand::class);
+        $parameters = [];
+        if (!empty($this->server)) {
+            $parameters['--server'] = (string)$this->server;
         }
-        return false;
-    }
-
-    /**
-     * Process the bounce mail
-     * @param Message $message the message object
-     * @return bool true if bounce mail can be parsed, else false
-     */
-    private function processBounceMail($message)
-    {
-        /** @var ReadmailUtility $readMail */
-        $readMail = GeneralUtility::makeInstance(ReadmailUtility::class);
-
-        // get attachment
-        $attachmentArray = $message->getAttachments();
-        $midArray = [];
-        if (is_array($attachmentArray)) {
-            // search in attachment
-            foreach ($attachmentArray as $v => $attachment) {
-                $bouncedMail = $attachment->getData();
-                // Find mail id
-                $midArray = $readMail->find_XTypo3MID($bouncedMail);
-                if (empty($midArray) === false) {
-                    // if mid, rid and rtbl are found, then stop looping
-                    break;
-                }
-            }
-        } else {
-            // search in MessageBody (see rfc822-headers as Attachments placed )
-            $midArray = $readMail->find_XTypo3MID($message->getMessageBody());
+        if (!empty($this->port)) {
+            $parameters['--port'] = (string)$this->port;
+        }
+        if (!empty($this->user)) {
+            $parameters['--user'] = (string)$this->user;
+        }
+        if (!empty($this->password)) {
+            $parameters['--password'] = (string)$this->password;
+        }
+        if (!empty($this->service)) {
+            $parameters['--type'] = (string)$this->service;
+        }
+        if (!empty($this->maxProcessed)) {
+            $parameters['--count'] = (string)$this->maxProcessed;
         }
 
-        if (empty($midArray)) {
-            // no mid, rid and rtbl found - exit
-            return false;
-        }
-
-        // Extract text content
-        $cp = $readMail->analyseReturnError($message->getMessageBody());
-
-        $row = GeneralUtility::makeInstance(SysDmailMaillogRepository::class)->selectForAnalyzeBounceMail($midArray['rid'], $midArray['rtbl'], $midArray['mid']);
-
-        // only write to log table, if we found a corresponding recipient record
-        if (!empty($row)) {
-            /** @var Connection $connection */
-            $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('sys_dmail_maillog');
-            try {
-                $midArray['email'] = $row['email'];
-                $insertFields = [
-                    'tstamp' => $this->getEXEC_TIME(),
-                    'response_type' => -127,
-                    'mid' => (int)$midArray['mid'],
-                    'rid' => (int)$midArray['rid'],
-                    'email' => $midArray['email'],
-                    'rtbl' => $midArray['rtbl'],
-                    'return_content' => serialize($cp),
-                    'return_code' => (int)$cp['reason'],
-                ];
-                $connection->insert('sys_dmail_maillog', $insertFields);
-                $sql_insert_id = $connection->lastInsertId();
-                return (bool)$sql_insert_id;
-            } catch (\Doctrine\DBAL\Exception $e) {
-                // Log $e->getMessage();
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Create connection to mail server.
-     * Return mailServer object or false on error
-     *
-     * @return bool|Server
-     */
-    private function connectMailServer()
-    {
-        // check if we can connect using the given data
-        /** @var Server $mailServer */
-        $mailServer = GeneralUtility::makeInstance(
-            Server::class,
-            $this->server,
-            (int)$this->port,
-            $this->service
-        );
-
-        // set mail username and password
-        $mailServer->setAuthentication($this->user, $this->password);
-
-        try {
-            $imapStream = $mailServer->getImapStream();
-            return $mailServer;
-        } catch (\Exception $e) {
-            return false;
-        }
-    }
-
-    /**
-     * https://docs.typo3.org/m/typo3/reference-coreapi/main/en-us/ApiOverview/Context/Index.html#example
-     * @TODO
-     */
-    private function getEXEC_TIME()
-    {
-        return GeneralUtility::makeInstance(Context::class)->getPropertyFromAspect('date', 'timestamp');
+        $input = new ArrayInput($parameters);
+        $output = new NullOutput();
+        return $command->run($input, $output) === Command::SUCCESS;
     }
 }
+

@@ -81,20 +81,4 @@ return [
         'provider' => \TYPO3\CMS\Core\Imaging\IconProvider\SvgIconProvider::class,
         'source' => 'EXT:direct_mail/Resources/Public/Images/module-directmail-statistics.svg',
     ],
-
-/**
-    'mysvgicon' => [
-        // icon provider class
-        'provider' => \TYPO3\CMS\Core\Imaging\IconProvider\SvgIconProvider::class,
-        // the source SVG for the SvgIconProvider
-        'source' => 'EXT:my_extension/Resources/Public/Icons/mysvg.svg',
-    ],
-    'myfontawesomeicon' => [
-        'provider' => \TYPO3\CMS\Core\Imaging\IconProvider\FontawesomeIconProvider::class,
-        // the fontawesome icon name
-        'name' => 'spinner',
-        // all icon providers provide the possibility to register an icon that spins
-        'spinning' => true,
-    ],
-*/
 ];

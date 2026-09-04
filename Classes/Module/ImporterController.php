@@ -975,7 +975,7 @@ final class ImporterController extends MainController
             $refInfo = parse_url($this->getHttpReferer());
             $httpHost = $this->getRequestHostOnly();
 
-            if ($httpHost != $refInfo['host'] && !$GLOBALS['TYPO3_CONF_VARS']['SYS']['doNotCheckReferer']) {
+            if ($httpHost != ($refInfo['host'] ?? '') && empty($GLOBALS['TYPO3_CONF_VARS']['SYS']['doNotCheckReferer'])) {
                 $this->beUser->writeLog(SystemLogType::FILE, 0, 2, 1, 'Referer host "%s" and server host "%s" did not match!', [$refInfo['host'], $httpHost]);
             } else {
                 // new file
@@ -1023,7 +1023,7 @@ final class ImporterController extends MainController
         $refInfo = parse_url($this->getHttpReferer());
         $httpHost = $this->getRequestHostOnly();
 
-        if ($httpHost != $refInfo['host'] && !$GLOBALS['TYPO3_CONF_VARS']['SYS']['doNotCheckReferer']) {
+        if ($httpHost != ($refInfo['host'] ?? '') && empty($GLOBALS['TYPO3_CONF_VARS']['SYS']['doNotCheckReferer'])) {
             $this->beUser->writeLog(SystemLogType::FILE, 0, 2, 1, 'Referer host "%s" and server host "%s" did not match!', [$refInfo['host'], $httpHost]);
         } else {
             $extendedFileUtility->start($this->csvFile);

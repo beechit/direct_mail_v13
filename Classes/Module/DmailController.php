@@ -1517,7 +1517,7 @@ final class DmailController extends MainController
         $idLists = [];
         foreach ($groups as $group) {
             // Testing to see if group ID is a valid integer, if not - skip to next group ID
-            $group = MathUtility::convertToPositiveInteger($group);
+            $group = max(0, (int)$group);
             if (!$group) {
                 continue;
             }
@@ -1666,7 +1666,7 @@ final class DmailController extends MainController
                     case 4:
                         $groups = array_unique(GeneralUtility::makeInstance(SysDmailGroupRepository::class)->getMailGroups($mailGroup['mail_groups'] ?? '', [$mailGroup['uid']], $this->perms_clause));
                         foreach ($groups as $group) {
-                            $group = MathUtility::convertToPositiveInteger($group);
+                            $group = max(0, (int)$group);
                             if (!$group) {
                                 continue;
                             }

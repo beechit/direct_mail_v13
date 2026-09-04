@@ -29,7 +29,6 @@ return [
                 'size' => '30',
                 'max' => '120',
                 'required' => true,
-                'eval' => 'trim',
             ],
         ],
         'page' => [
@@ -51,7 +50,6 @@ return [
                 'size' => '30',
                 'max' => '80',
                 'required' => true,
-                'eval' => 'trim',
             ],
         ],
         'from_name' => [
@@ -60,7 +58,6 @@ return [
             'config' => [
                 'type' => 'input',
                 'size' => '30',
-                'eval' => 'trim',
                 'max' => '80',
             ],
         ],
@@ -70,7 +67,6 @@ return [
             'config' => [
                 'type' => 'input',
                 'size' => '30',
-                'eval' => 'trim',
                 'max' => '80',
             ],
         ],
@@ -80,7 +76,6 @@ return [
             'config' => [
                 'type' => 'input',
                 'size' => '30',
-                'eval' => 'trim',
                 'max' => '80',
             ],
         ],
@@ -90,7 +85,6 @@ return [
             'config' => [
                 'type' => 'input',
                 'size' => '30',
-                'eval' => 'trim',
                 'max' => '80',
             ],
         ],
@@ -100,7 +94,6 @@ return [
             'config' => [
                 'type' => 'input',
                 'size' => '30',
-                'eval' => 'trim',
                 'max' => '80',
             ],
         ],
@@ -125,7 +118,6 @@ return [
                 'type' => 'input',
                 'size' => '15',
                 'max' => '20',
-                'eval' => 'trim',
                 'default' => 'iso-8859-1',
             ],
         ],
@@ -179,7 +171,6 @@ return [
                 'type' => 'input',
                 'size' => '15',
                 'max' => '80',
-                'eval' => 'trim',
                 'default' => '',
             ],
         ],
@@ -190,7 +181,6 @@ return [
                 'type' => 'input',
                 'size' => '15',
                 'max' => '80',
-                'eval' => 'trim',
                 'default' => '&type=99',
             ],
         ],
@@ -245,7 +235,6 @@ return [
                 'type' => 'input',
                 'size' => '15',
                 'max' => '80',
-                'eval' => 'trim',
                 'default' => '',
             ],
         ],
@@ -262,7 +251,6 @@ return [
             'config' => [
                 'type' => 'input',
                 'size' => '30',
-                'eval' => 'trim',
                 'max' => '80',
                 'default' => 'uid,name,email,password',
             ],

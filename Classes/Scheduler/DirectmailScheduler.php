@@ -15,33 +15,31 @@ namespace DirectMailTeam\DirectMail\Scheduler;
  * The TYPO3 project - inspiring people to share!
  */
 
-use DirectMailTeam\DirectMail\Dmailer;
+use DirectMailTeam\DirectMail\Command\DirectmailCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Scheduler\Task\AbstractTask;
 
 /**
-* Class tx_directmail_scheduler
-*
-* @author	Ivan Kartolo <ivan.kartolo@dkd.de>
-* @deprecated will be removed in TYPO3 v12.0. Use DirectmailCommand instead.
-*/
-class DirectmailScheduler extends \TYPO3\CMS\Scheduler\Task\AbstractTask
+ * Class DirectmailScheduler
+ *
+ * @author Ivan Kartolo <ivan.kartolo@dkd.de>
+ */
+class DirectmailScheduler extends AbstractTask
 {
     /**
      * Function executed from scheduler.
-     * Send the newsletter
+     * Send the newsletter using DirectmailCommand
      *
-     * @return	bool
+     * @return bool
      */
-    public function execute()
+    public function execute(): bool
     {
-        trigger_error(
-            'will be removed in TYPO3 v12.0. Use DirectmailCommand instead.',
-            E_USER_DEPRECATED
-        );
-        /* @var $htmlmail \DirectMailTeam\DirectMail\Dmailer */
-        $htmlmail = GeneralUtility::makeInstance(Dmailer::class);
-        $htmlmail->start();
-        $htmlmail->runcron();
-        return true;
+        $command = GeneralUtility::makeInstance(DirectmailCommand::class);
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+        return $command->run($input, $output) === Command::SUCCESS;
     }
 }
