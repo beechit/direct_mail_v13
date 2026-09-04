@@ -18,6 +18,7 @@ namespace DirectMailTeam\DirectMail\Scheduler;
 use Fetch\Server;
 use TYPO3\CMS\Core\Localization\LanguageService;
 use TYPO3\CMS\Core\Messaging\FlashMessage;
+use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Scheduler\AbstractAdditionalFieldProvider;
 use TYPO3\CMS\Scheduler\Controller\SchedulerModuleController;
@@ -31,12 +32,6 @@ use TYPO3\CMS\Scheduler\Task\AbstractTask;
  */
 class AnalyzeBounceMailAdditionalFields extends AbstractAdditionalFieldProvider
 {
-    public function __construct()
-    {
-        // add locallang file
-        $this->getLanguangeService()->includeLLFile('EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf');
-    }
-
     /**
      * This method is used to define new fields for adding or editing a task
      * In this case, it adds an email field
@@ -90,7 +85,7 @@ class AnalyzeBounceMailAdditionalFields extends AbstractAdditionalFieldProvider
      * @param array $submittedData An array containing the data submitted by the add/edit task form
      * @param AnalyzeBounceMail $task Reference to the scheduler backend module
      */
-    public function saveAdditionalFields(array $submittedData, AbstractTask $task)
+    public function saveAdditionalFields(array $submittedData, AbstractTask $task): void
     {
         $task->setServer($submittedData['bounceServer']);
         $task->setPort((int)$submittedData['bouncePort']);
@@ -127,16 +122,16 @@ class AnalyzeBounceMailAdditionalFields extends AbstractAdditionalFieldProvider
                 $return = true;
             } catch (\Exception $e) {
                 $this->addMessage(
-                    $this->getLanguangeService()->getLL('scheduler.bounceMail.dataVerification') .
+                    $this->getLanguangeService()->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf:scheduler.bounceMail.dataVerification') .
                     $e->getMessage(),
-                    FlashMessage::ERROR
+                    ContextualFeedbackSeverity::ERROR
                 );
                 $return = false;
             }
         } else {
             $this->addMessage(
-                $this->getLanguangeService()->getLL('scheduler.bounceMail.phpImapError'),
-                FlashMessage::ERROR
+                $this->getLanguangeService()->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf:scheduler.bounceMail.phpImapError'),
+                ContextualFeedbackSeverity::ERROR
             );
             $return = false;
         }
@@ -149,9 +144,9 @@ class AnalyzeBounceMailAdditionalFields extends AbstractAdditionalFieldProvider
         // create server input field
         return [
             'code'     => $fieldHTML,
-            'label'    => $this->getLanguangeService()->getLL('scheduler.bounceMail.' . $fieldName),
+            'label'    => $this->getLanguangeService()->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf:scheduler.bounceMail.' . $fieldName),
             'cshKey'   => $fieldName,
-            'cshLabel' => $this->getLanguangeService()->getLL('scheduler.bounceMail.csh.' . $fieldName),
+            'cshLabel' => $this->getLanguangeService()->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf:scheduler.bounceMail.csh.' . $fieldName),
         ];
     }
 

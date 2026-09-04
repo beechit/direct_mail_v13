@@ -7,6 +7,19 @@ services:
   DirectMailTeam\DirectMail\:
     resource: '../Classes/*'
 
+  DirectMailTeam\DirectMail\Module\ConfigurationController:
+    tags: ['backend.controller']
+  DirectMailTeam\DirectMail\Module\DmailController:
+    tags: ['backend.controller']
+  DirectMailTeam\DirectMail\Module\ImporterController:
+    tags: ['backend.controller']
+  DirectMailTeam\DirectMail\Module\MailerEngineController:
+    tags: ['backend.controller']
+  DirectMailTeam\DirectMail\Module\RecipientListController:
+    tags: ['backend.controller']
+  DirectMailTeam\DirectMail\Module\StatisticsController:
+    tags: ['backend.controller']
+
   DirectMailTeam\DirectMail\Command\InvokeMailerEngineCommand:
     tags:
       - name: 'console.command'
@@ -29,7 +42,6 @@ services:
   dashboard.widget.dm:
     class: 'DirectMailTeam\DirectMail\Widgets\DmWidget'
     arguments:
-      $view: '@dashboard.views.widget'
       $dataProvider: '@dashboard.provider.dm'
     tags:
       - name: dashboard.widget
@@ -46,7 +58,6 @@ services:
   dashboard.widget.dmMailEngineStatus:
     class: 'TYPO3\CMS\Dashboard\Widgets\DoughnutChartWidget'
     arguments:
-      $view: '@dashboard.views.widget'
       $dataProvider: '@dashboard.provider.dmMailEngineStatus'
       $options:
         refreshAvailable: true
@@ -65,7 +76,6 @@ services:
   dashboard.widget.dmStatistics:
     class: 'TYPO3\CMS\Dashboard\Widgets\BarChartWidget'
     arguments:
-      $view: '@dashboard.views.widget'
       $dataProvider: '@dashboard.provider.dmStatistics'
       $options:
         refreshAvailable: true

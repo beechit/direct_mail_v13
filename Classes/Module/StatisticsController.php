@@ -4,74 +4,116 @@ declare(strict_types=1);
 
 namespace DirectMailTeam\DirectMail\Module;
 
+
 use DirectMailTeam\DirectMail\DirectMailUtility;
 use DirectMailTeam\DirectMail\Repository\FeUsersRepository;
 use DirectMailTeam\DirectMail\Repository\SysDmailMaillogRepository;
 use DirectMailTeam\DirectMail\Repository\SysDmailRepository;
 use DirectMailTeam\DirectMail\Repository\TempRepository;
 use DirectMailTeam\DirectMail\Repository\TtAddressRepository;
+use DirectMailTeam\DirectMail\Utility\FetchUtility;
+use DirectMailTeam\DirectMail\Utility\TsUtility;
 use DirectMailTeam\DirectMail\Utility\Typo3ConfVarsUtility;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\UriInterface;
+use TYPO3\CMS\Backend\Routing\Exception\RouteNotFoundException;
+use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
+use TYPO3\CMS\Backend\Template\ModuleTemplate;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Domain\Repository\PageRepository;
-use TYPO3\CMS\Core\Http\HtmlResponse;
-use TYPO3\CMS\Core\Imaging\Icon;
+use TYPO3\CMS\Core\Imaging\IconFactory;
+use TYPO3\CMS\Core\Imaging\IconSize;
+use TYPO3\CMS\Core\Localization\LanguageService;
+use TYPO3\CMS\Core\Messaging\FlashMessageQueue;
+use TYPO3\CMS\Core\Pagination\ArrayPaginator;
+use TYPO3\CMS\Core\Type\Bitmask\Permission;
+use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\MathUtility;
 
-class StatisticsController extends MainController
+final class StatisticsController extends MainController
 {
-    /**
-     * The name of the module
-     *
-     * @var string
-     */
-    protected $moduleName = 'DirectMailNavFrame_Statistics';
+    protected FlashMessageQueue $flashMessageQueue;
 
-    protected $requestUri = '';
+    protected array $categories = [];
 
-    private int $uid = 0;
-    private string $table = '';
-    private array $tables = ['tt_address', 'fe_users'];
-    private bool $recalcCache = false;
-    private bool $submit = false;
-    private array $indata = [];
+    public function __construct(
+        protected readonly ModuleTemplateFactory $moduleTemplateFactory,
+        protected readonly IconFactory $iconFactory,
 
-    private bool $returnList    = false;
-    private bool $returnDisable = false;
-    private bool $returnCSV     = false;
+        protected readonly string $moduleName = 'directmail_module_statistics',
+        protected readonly string $lllFile = 'LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf',
 
-    private bool $unknownList    = false;
-    private bool $unknownDisable = false;
-    private bool $unknownCSV     = false;
+        protected ?LanguageService $languageService = null,
 
-    private bool $fullList    = false;
-    private bool $fullDisable = false;
-    private bool $fullCSV     = false;
+        protected array $pageinfo = [],
+        protected int $id = 0,
+        protected int $currentPageNumber = 1,
+        protected bool $access = false,
 
-    private bool $badHostList    = false;
-    private bool $badHostDisable = false;
-    private bool $badHostCSV     = false;
+        protected string $requestUri = '',
+        public string $output = '',
 
-    private bool $badHeaderList    = false;
-    private bool $badHeaderDisable = false;
-    private bool $badHeaderCSV     = false;
+        private int $uid = 0,
+        private string $table = '',
+        private array $tables = ['tt_address', 'fe_users'],
+        private bool $recalcCache = false,
+        private bool $submit = false,
+        private array $indata = [],
 
-    private bool $reasonUnknownList    = false;
-    private bool $reasonUnknownDisable = false;
-    private bool $reasonUnknownCSV     = false;
+        private bool $returnList    = false,
+        private bool $returnDisable = false,
+        private bool $returnCSV     = false,
 
-    private string $siteUrl = '';
+        private bool $unknownList    = false,
+        private bool $unknownDisable = false,
+        private bool $unknownCSV     = false,
 
-    protected function initStatistics(ServerRequestInterface $request): void
+        private bool $fullList    = false,
+        private bool $fullDisable = false,
+        private bool $fullCSV     = false,
+
+        private bool $badHostList    = false,
+        private bool $badHostDisable = false,
+        private bool $badHostCSV     = false,
+
+        private bool $badHeaderList    = false,
+        private bool $badHeaderDisable = false,
+        private bool $badHeaderCSV     = false,
+
+        private bool $reasonUnknownList    = false,
+        private bool $reasonUnknownDisable = false,
+        private bool $reasonUnknownCSV     = false,
+
+        protected array $implodedParams = [],
+
+        private string $siteUrl = ''
+    ) {
+    }
+
+    public function handleRequest(ServerRequestInterface $request): ResponseInterface
     {
-        $this->siteUrl = $request->getAttribute('normalizedParams')->getSiteUrl();
+        $this->languageService = $this->getLanguageService();
+        $this->flashMessageQueue = $this->getFlashMessageQueue('StatisticsQueue');
 
         $queryParams = $request->getQueryParams();
         $parsedBody = $request->getParsedBody();
-
         $normalizedParams = $request->getAttribute('normalizedParams');
+
+        $this->id = (int)($parsedBody['id'] ?? $queryParams['id'] ?? 0);
+        $this->cmd            = (string)($parsedBody['cmd']          ?? $queryParams['cmd'] ?? '');
+        $this->sys_dmail_uid  = (int)($parsedBody['sys_dmail_uid']   ?? $queryParams['sys_dmail_uid'] ?? 0);
+
+        $this->currentPageNumber = (int)($queryParams['currentPageNumber'] ?? 1);
+        $this->currentPageNumber = $this->currentPageNumber > 0 ? $this->currentPageNumber : 1;
+
+        $permsClause = $this->getBackendUser()->getPagePermsClause(Permission::PAGE_SHOW);
+        $pageAccess = BackendUtility::readPageAccess($this->id, $permsClause);
+        $this->pageinfo = is_array($pageAccess) ? $pageAccess : [];
+        $this->access = is_array($this->pageinfo) ? true : false;
+
+        $this->siteUrl = $normalizedParams->getSiteUrl();
         $this->requestUri = $normalizedParams->getRequestUri();
 
         $this->uid = (int)($parsedBody['uid'] ?? $queryParams['uid'] ?? 0);
@@ -109,92 +151,123 @@ class StatisticsController extends MainController
         $this->reasonUnknownList    = (bool)($parsedBody['reasonUnknownList'] ?? $queryParams['reasonUnknownList'] ?? false);
         $this->reasonUnknownDisable = (bool)($parsedBody['reasonUnknownDisable'] ?? $queryParams['reasonUnknownDisable'] ?? false);
         $this->reasonUnknownCSV     = (bool)($parsedBody['reasonUnknownCSV'] ?? $queryParams['reasonUnknownCSV'] ?? false);
+
+        $params = BackendUtility::getPagesTSconfig($this->id)['mod.']['web_modules.']['dmail.'] ?? [];
+        $this->implodedParams = GeneralUtility::makeInstance(TsUtility::class)->implodeTSParams($params);
+
+        $moduleTemplate = $this->moduleTemplateFactory->create($request);
+        return $this->indexAction($moduleTemplate);
     }
 
-    public function indexAction(ServerRequestInterface $request): ResponseInterface
+    public function indexAction(ModuleTemplate $view): ResponseInterface
     {
-        $this->view = $this->configureTemplatePaths('Statistics');
-
-        $this->init($request);
-        $this->initStatistics($request);
-
         if (($this->id && $this->access) || ($this->isAdmin() && !$this->id)) {
+
             $module = $this->getModulName();
 
             if ($module == 'dmail') {
                 // Direct mail module
                 if (($this->pageinfo['doktype'] ?? 0) == 254) {
                     $data = $this->moduleContent();
-                    $this->view->assignMultiple(
+
+                    $itemsPerPage = 100; //@TODO
+                    $paginator = GeneralUtility::makeInstance(
+                        ArrayPaginator::class,
+                        $data['dataPageInfo'] ?? [],
+                        $this->currentPageNumber,
+                        $itemsPerPage
+                    );
+
+                    $view->assignMultiple(
                         [
                             'data' => $data,
+                            'pagination' => [
+                                'numberOfPages' => $paginator->getNumberOfPages(),
+                                'currentPageNumber' => $paginator->getCurrentPageNumber(),
+                                'keyOfFirstPaginatedItem' => $paginator->getKeyOfFirstPaginatedItem(),
+                                'keyOfLastPaginatedItem' => $paginator->getKeyOfLastPaginatedItem(),
+                                'paginatedItems' => $paginator->getPaginatedItems(),
+                                'links' =>  array_fill(0, $paginator->getNumberOfPages(), '')
+                            ],
+                            'id' => $this->id,
+                            'moduleName' => $this->moduleName,
                             'show' => true,
                         ]
                     );
                 } elseif ($this->id != 0) {
-                    $message = $this->createFlashMessage($this->getLanguageService()->getLL('dmail_noRegular'), $this->getLanguageService()->getLL('dmail_newsletters'), 1, false);
-                    $this->messageQueue->addMessage($message);
+                    $message = $this->createFlashMessage(
+                        $this->languageService->sL($this->lllFile . ':dmail_noRegular'),
+                        $this->languageService->sL($this->lllFile . ':dmail_newsletters'),
+                        ContextualFeedbackSeverity::WARNING,
+                        false
+                    );
+                    $this->flashMessageQueue->addMessage($message);
                 }
             } else {
-                $message = $this->createFlashMessage($this->getLanguageService()->getLL('select_folder'), $this->getLanguageService()->getLL('header_stat'), 1, false);
-                $this->messageQueue->addMessage($message);
-                $this->view->assignMultiple(
+                $message = $this->createFlashMessage(
+                    $this->languageService->sL($this->lllFile . ':select_folder'),
+                    $this->languageService->sL($this->lllFile . ':header_stat'),
+                    ContextualFeedbackSeverity::WARNING,
+                    false
+                );
+                $this->flashMessageQueue->addMessage($message);
+                $view->assignMultiple(
                     [
                         'dmLinks' => $this->getDMPages($this->moduleName),
                     ]
                 );
             }
         } else {
-            // If no access or if ID == zero
-            $this->view = $this->configureTemplatePaths('NoAccess');
-            $message = $this->createFlashMessage('If no access or if ID == zero', 'No Access', 1, false);
-            $this->messageQueue->addMessage($message);
+            $message = $this->createFlashMessage(
+                $this->languageService->sL($this->lllFile . ':mod.main.no_access'),
+                $this->languageService->sL($this->lllFile . ':mod.main.no_access.title'),
+                ContextualFeedbackSeverity::WARNING,
+                false
+            );
+            $this->flashMessageQueue->addMessage($message);
+            return $view->renderResponse('NoAccess');
         }
 
-        /**
-         * Render template and return html content
-         */
-        $this->moduleTemplate->setContent($this->view->render());
-        return new HtmlResponse($this->moduleTemplate->renderContent());
+        return $view->renderResponse('Statistics');
     }
 
     protected function moduleContent(): array
     {
-        $theOutput = [];
+        $output = [];
 
         if (!$this->sys_dmail_uid) {
-            $theOutput['dataPageInfo'] = $this->displayPageInfo();
+            $output['dataPageInfo'] = $this->displayPageInfo();
         } else {
             $row = GeneralUtility::makeInstance(SysDmailRepository::class)->selectSysDmailById($this->sys_dmail_uid, $this->id);
             if (is_array($row)) {
                 // COMMAND:
                 switch ($this->cmd) {
                     case 'displayUserInfo': //@TODO ???
-                        $theOutput['dataUserInfo'] = $this->displayUserInfo();
+                        $output['dataUserInfo'] = $this->displayUserInfo();
                         break;
                     case 'stats':
-                        $theOutput['dataStats'] = $this->stats($row);
+                        $output['dataStats'] = $this->stats($row);
                         break;
                     default:
                         // Hook for handling of custom direct mail commands:
                         if (is_array($GLOBALS['TYPO3_CONF_VARS']['EXT']['directmail']['handledirectmailcmd-' . $this->cmd] ?? false)) {
                             foreach ($GLOBALS['TYPO3_CONF_VARS']['EXT']['directmail']['handledirectmailcmd-' . $this->cmd] as $funcRef) {
                                 $params = ['pObj' => &$this];
-                                $theOutput['dataHook'] = GeneralUtility::callUserFunction($funcRef, $params, $this);
+                                $output['dataHook'] = GeneralUtility::callUserFunction($funcRef, $params, $this);
                             }
                         }
                 }
             }
         }
-        return $theOutput;
+        return $output;
     }
 
     /**
      * Shows the info of a page
      *
-     * @return string The infopage of the sent newsletters
+     * @return array The infopage of the sent newsletters
      */
-    protected function displayPageInfo()
+    protected function displayPageInfo(): array
     {
         // Here the dmail list is rendered:
         $rows = GeneralUtility::makeInstance(SysDmailRepository::class)->selectForPageInfo($this->id);
@@ -203,8 +276,10 @@ class StatisticsController extends MainController
             foreach ($rows as $row) {
                 $data[] = [
                     'id'              => $row['uid'],
-                    'icon'            => $this->iconFactory->getIconForRecord('sys_dmail', $row, Icon::SIZE_SMALL)->render(),
-                    'subject'         => $this->linkDMail_record(GeneralUtility::fixed_lgd_cs($row['subject'], 50) . '  ', $row['uid'], $row['subject']),
+                    'icon'            => $this->iconFactory->getIconForRecord('sys_dmail', $row, IconSize::SMALL)->render(),
+                    'url'             => $this->linkDMailRecord($row['uid']),
+                    'subject'         => htmlspecialchars($row['subject']),
+                    'subjectShort'    => htmlspecialchars(GeneralUtility::fixed_lgd_cs($row['subject'], 50)),
                     'scheduled'       => BackendUtility::datetime($row['scheduled']),
                     'scheduled_begin' => $row['scheduled_begin'] ? BackendUtility::datetime($row['scheduled_begin']) : '',
                     'scheduled_end'   => $row['scheduled_end'] ? BackendUtility::datetime($row['scheduled_end']) : '',
@@ -221,12 +296,12 @@ class StatisticsController extends MainController
     {
         if (!empty($row['scheduled_begin'])) {
             if (!empty($row['scheduled_end'])) {
-                $sent = $this->getLanguageService()->getLL('stats_overview_sent');
+                $sent = $this->languageService->sL($this->lllFile . ':stats_overview_sent');
             } else {
-                $sent = $this->getLanguageService()->getLL('stats_overview_sending');
+                $sent = $this->languageService->sL($this->lllFile . ':stats_overview_sending');
             }
         } else {
-            $sent = $this->getLanguageService()->getLL('stats_overview_queuing');
+            $sent = $this->languageService->sL($this->lllFile . ':stats_overview_queuing');
         }
         return $sent;
     }
@@ -234,10 +309,11 @@ class StatisticsController extends MainController
     /**
      * Shows user's info and categories
      *
-     * @return string HTML showing user's info and the categories
+     * @return array HTML showing user's info and the categories
      */
-    protected function displayUserInfo()
+    protected function displayUserInfo(): array
     {
+        $data = [];
         if ($this->submit) {
             if (count($this->indata) < 1) {
                 $this->indata['html'] = 0;
@@ -266,7 +342,6 @@ class StatisticsController extends MainController
 
                     /* @var $dataHandler \TYPO3\CMS\Core\DataHandling\DataHandler */
                     $dataHandler = $this->getDataHandler();
-                    $dataHandler->stripslashes_values = 0;
                     $dataHandler->start($data, []);
                     $dataHandler->process_datamap();
                 }
@@ -314,7 +389,7 @@ class StatisticsController extends MainController
             $this->categories = GeneralUtility::makeInstance(TempRepository::class)->makeCategories($this->table, $row, $this->sys_language_uid);
             $data = [
                 'icon'            => $this->iconFactory->getIconForRecord($this->table, $row)->render(),
-                'iconActionsOpen' => $iconActionsOpen = $this->getIconActionsOpen(),
+                'iconActionsOpen' => $this->getIconActionsOpen(),
                 'name'            => htmlspecialchars($row['name']),
                 'email'           => htmlspecialchars($row['email']),
                 'uid'             => $row['uid'],
@@ -418,16 +493,16 @@ class StatisticsController extends MainController
      *
      * @param array $row DB record
      *
-     * @return string Statistics of a mail
+     * @return array Statistics of a mail
      * @throws RouteNotFoundException If the named route doesn't exist
      */
-    protected function stats($row)
+    protected function stats(array $row): array
     {
         if ($this->recalcCache) {
             $this->makeStatTempTableContent($row);
         }
 
-        $compactView = $this->directMail_compactView($row);
+        $compactView = $this->directMailCompactView($row);
 
         $mailResponsesGeneral = $this->mailResponsesGeneral($row['uid']);
         $tables = [];
@@ -550,11 +625,13 @@ class StatisticsController extends MainController
         arsort($urlCounter['plain']);
         reset($urlCounter['total']);
 
+        $htmlLinks = [];
+        $html = false;
+
         // HTML mails
         if ((int)($row['sendOptions']) & 0x2) {
             $htmlContent = $unpackedMail['html']['content'];
 
-            $htmlLinks = [];
             if (is_array($unpackedMail['html']['hrefs'])) {
                 foreach ($unpackedMail['html']['hrefs'] as $jumpurlId => $data) {
                     $htmlLinks[$jumpurlId] = [
@@ -609,7 +686,7 @@ class StatisticsController extends MainController
             }
         }
 
-        $iconAppsToolbarMenuSearch = $this->iconFactory->getIcon('apps-toolbar-menu-search', Icon::SIZE_SMALL)->render();
+        $iconAppsToolbarMenuSearch = $this->iconFactory->getIcon('apps-toolbar-menu-search', IconSize::SMALL)->render();
         $tblLines = [];
 
         foreach ($urlCounter['total'] as $id => $_) {
@@ -623,7 +700,6 @@ class StatisticsController extends MainController
             $urlstr = $this->getUrlStr($uParts);
 
             $label = $this->getLinkLabel($url, $urlstr, false, $htmlLinks[$id]['label']);
-
             $img = '<a href="' . $urlstr . '" target="_blank">' . $iconAppsToolbarMenuSearch . '</a>';
 
             if (isset($urlCounter['html'][$id]['plainId'])) {
@@ -653,7 +729,7 @@ class StatisticsController extends MainController
         // go through all links that were not clicked yet and that have a label
         $clickedLinks = array_keys($urlCounter['total']);
         foreach ($urlArr as $id => $link) {
-            if (!in_array($id, $clickedLinks) && (isset($htmlLinks['id']))) {
+            if (!in_array($id, $clickedLinks) && (isset($htmlLinks[$id]))) {
                 // a link to this host?
                 $uParts = @parse_url($link);
                 $urlstr = $this->getUrlStr($uParts);
@@ -717,9 +793,9 @@ class StatisticsController extends MainController
         );
 
         // The icons:
-        $listIcons = $this->iconFactory->getIcon('actions-system-list-open', Icon::SIZE_SMALL);
-        $csvIcons  = $this->iconFactory->getIcon('actions-document-export-csv', Icon::SIZE_SMALL);
-        $hideIcons = $this->iconFactory->getIcon('actions-lock', Icon::SIZE_SMALL);
+        $listIcons = $this->iconFactory->getIcon('actions-system-list-open', IconSize::SMALL);
+        $csvIcons  = $this->iconFactory->getIcon('actions-document-export-csv', IconSize::SMALL);
+        $hideIcons = $this->iconFactory->getIcon('actions-lock', IconSize::SMALL);
 
         // Table with Icon
         $responseResult = $sysDmailMaillogRepository->countReturnCode($row['uid']);
@@ -1232,18 +1308,16 @@ class StatisticsController extends MainController
     }
 
     /**
-     * Wrap a string with a link
+     * get url for dmail record
      *
-     * @param string $str String to be wrapped with a link
      * @param int $uid Record uid to be link
-     * @param string $aTitle Title param of the link tag
      *
-     * @return string wrapped string as a link
+     * @return UriInterface
      * @throws RouteNotFoundException If the named route doesn't exist
      */
-    protected function linkDMail_record($str, $uid, $aTitle='')
+    protected function linkDMailRecord(int $uid): UriInterface
     {
-        $moduleUrl = $this->buildUriFromRoute(
+        return $this->buildUriFromRoute(
             $this->moduleName,
             [
                 'id' => $this->id,
@@ -1252,7 +1326,6 @@ class StatisticsController extends MainController
                 'SET[dmail_mode]' => 'direct',
             ]
         );
-        return '<a title="' . htmlspecialchars($aTitle) . '" href="' . $moduleUrl . '">' . htmlspecialchars($str) . '</a>';
     }
 
     /**
@@ -1275,46 +1348,65 @@ class StatisticsController extends MainController
      *
      * @param array $row Direct mail record
      *
-     * @return string The compact infos of the direct mail record
+     * @return array The compact infos of the direct mail record
      */
-    protected function directMail_compactView($row)
+    protected function directMailCompactView(array $row): array
     {
-        $dmailInfo = '';
+        $dmailInfo = [];
+        $fromInfo = [
+            $this->languageService->sL($this->lllFile . ':view_replyto') => htmlspecialchars($row['replyto_name']). '&lt;' . htmlspecialchars($row['replyto_email']) . '&gt;',
+            $this->languageService->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:sys_dmail.organisation') => htmlspecialchars($row['organisation']),
+            $this->languageService->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:sys_dmail.return_path') => htmlspecialchars($row['return_path'])
+        ];
+        $mailInfo = [
+            $this->languageService->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:sys_dmail.priority') => BackendUtility::getProcessedValue('sys_dmail', 'priority', $row['priority']),
+            $this->languageService->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:sys_dmail.transfer_encoding') => BackendUtility::getProcessedValue('sys_dmail', 'encoding', $row['encoding']),
+            $this->languageService->sL('LLL:EXT:direct_mail/Resources/Private/Language/locallang_tca.xlf:sys_dmail.charset') => BackendUtility::getProcessedValue('sys_dmail', 'charset', $row['charset']),
+        ];
+        $dmailData = [
+            'plainParams' => '',
+            'HTMLParams' => '',
+            'page' => '',
+            'title' => ''
+
+        ];
+
         // Render record:
         if ($row['type']) {
-            $dmailData = $row['plainParams'] . ', ' . $row['HTMLParams'];
+            $dmailData['plainParams'] = $row['plainParams'];
+            $dmailData['HTMLParams'] = $row['HTMLParams'];
         } else {
             $page = BackendUtility::getRecord('pages', $row['page'], 'title');
-            $dmailData = $row['page'] . ', ' . htmlspecialchars($page['title']);
-            $dmailInfo = DirectMailUtility::fName('plainParams') . ' ' . htmlspecialchars($row['plainParams'] . LF . DirectMailUtility::fName('HTMLParams') . $row['HTMLParams']) . '; ' . LF;
+            $dmailData['page'] = $row['page'];
+            $dmailData['title'] = htmlspecialchars($page['title'] ?? '');
+
+            $dmailInfo = [
+                DirectMailUtility::fName('plainParams') => htmlspecialchars($row['plainParams']),
+                DirectMailUtility::fName('HTMLParams') => htmlspecialchars($row['HTMLParams']),
+                $this->languageService->sL($this->lllFile . ':view_media') => htmlspecialchars(BackendUtility::getProcessedValue('sys_dmail', 'includeMedia', $row['includeMedia'])),
+                $this->languageService->sL($this->lllFile . ':view_flowed') => htmlspecialchars(BackendUtility::getProcessedValue('sys_dmail', 'flowedFormat', $row['flowedFormat']))
+            ];
         }
 
         $res = GeneralUtility::makeInstance(SysDmailMaillogRepository::class)->selectSysDmailMaillogsCompactView($row['uid']);
 
         $data = [
-            'icon'          => $this->iconFactory->getIconForRecord('sys_dmail', $row, Icon::SIZE_SMALL)->render(),
-            'iconInfo'      => $this->iconFactory->getIcon('actions-document-info', Icon::SIZE_SMALL)->render(),
+            'icon'          => $this->iconFactory->getIconForRecord('sys_dmail', $row, IconSize::SMALL)->render(),
+            'iconInfo'      => $this->iconFactory->getIcon('actions-document-info', IconSize::SMALL)->render(),
             'subject'       => htmlspecialchars($row['subject']),
             'from_name'     => htmlspecialchars($row['from_name']),
             'from_email'    => htmlspecialchars($row['from_email']),
-            'replyto_name'  => htmlspecialchars($row['replyto_name']),
-            'replyto_email' => htmlspecialchars($row['replyto_email']),
             'type'          => BackendUtility::getProcessedValue('sys_dmail', 'type', $row['type']),
             'dmailData'     => $dmailData,
+            'fromInfo'      => $fromInfo,
             'dmailInfo'     => $dmailInfo,
-            'priority'      => BackendUtility::getProcessedValue('sys_dmail', 'priority', $row['priority']),
-            'encoding'      => BackendUtility::getProcessedValue('sys_dmail', 'encoding', $row['encoding']),
-            'charset'       => BackendUtility::getProcessedValue('sys_dmail', 'charset', $row['charset']),
+            'mailInfo'      => $mailInfo,
             'sendOptions'   => BackendUtility::getProcessedValue('sys_dmail', 'sendOptions', $row['sendOptions']) . ($row['attachment'] ? '; ' : ''),
             'attachment'    => BackendUtility::getProcessedValue('sys_dmail', 'attachment', $row['attachment']),
-            'flowedFormat'  => BackendUtility::getProcessedValue('sys_dmail', 'flowedFormat', $row['flowedFormat']),
-            'includeMedia'  => BackendUtility::getProcessedValue('sys_dmail', 'includeMedia', $row['includeMedia']),
             'delBegin'      => $row['scheduled_begin'] ? BackendUtility::datetime($row['scheduled_begin']) : '-',
             'delEnd'        => $row['scheduled_end'] ? BackendUtility::datetime($row['scheduled_end']) : '-',
             'totalRecip'    => $this->countTotalRecipientFromQueryInfo($row['query_info']),
             'sentRecip'     => count($res),
-            'organisation'  => htmlspecialchars($row['organisation']),
-            'return_path'   => htmlspecialchars($row['return_path']),
         ];
         return $data;
     }
@@ -1327,10 +1419,9 @@ class StatisticsController extends MainController
      *
      * @return string show number of pieces and the percent
      */
-    protected function showWithPercent($pieces, $total)
+    protected function showWithPercent(int $pieces, int $total): string
     {
-        $total = (int)$total;
-        $str = $pieces ? number_format((int)$pieces) : '0';
+        $str = $pieces ? number_format($pieces) : '0';
         if ($total) {
             $str .= ' / ' . number_format(($pieces/$total*100), 2) . '%';
         }
@@ -1342,7 +1433,7 @@ class StatisticsController extends MainController
      *
      * @param array $mrow DB mail records
      */
-    protected function makeStatTempTableContent(array $mrow)
+    protected function makeStatTempTableContent(array $mrow): void
     {
         $done = GeneralUtility::makeInstance(TempRepository::class)->deleteOldCache((int)$mrow['uid']);
         $rows = GeneralUtility::makeInstance(SysDmailMaillogRepository::class)->selectStatTempTableContent($mrow['uid']);
@@ -1416,7 +1507,7 @@ class StatisticsController extends MainController
      *
      * @param array $recRec Statistic array
      */
-    protected function storeRecRec(array $recRec)
+    protected function storeRecRec(array $recRec): void
     {
         if (is_array($recRec)) {
             $recRec['pings_first'] = empty($recRec['pings']) ? 0 : (int)(@min($recRec['pings']));
@@ -1462,6 +1553,7 @@ class StatisticsController extends MainController
         if (is_array($urlParts) && isset($urlParts['host']) && $this->siteUrl == $urlParts['host']) {
             $m = [];
             // do we have an id?
+            $uid = 0;
             if (preg_match('/(?:^|&)id=([0-9a-z_]+)/', $urlParts['query'], $m)) {
                 $isInt = MathUtility::canBeInterpretedAsInteger($m[1]);
                 if ($isInt) {
@@ -1525,7 +1617,11 @@ class StatisticsController extends MainController
      *
      * @return string The label for the passed $url parameter
      */
-    public function getLinkLabel($url, $urlStr, $forceFetch = false, $linkedWord = '')
+    public function getLinkLabel(
+        string $url,
+        string $urlStr,
+        bool $forceFetch = false,
+        string $linkedWord = ''): string
     {
         $pathSite = $this->getBaseURL();
         $label = $linkedWord;
@@ -1533,7 +1629,7 @@ class StatisticsController extends MainController
 
         $urlParts = parse_url($url);
         if (!$forceFetch && (substr($url, 0, strlen($pathSite)) === $pathSite)) {
-            if ($urlParts['fragment'] ?? '' && (substr($urlParts['fragment'], 0, 1) == 'c')) {
+            if ($urlParts['fragment'] ?? 0 && (substr($urlParts['fragment'], 0, 1) == 'c')) {
                 // linking directly to a content
                 $elementUid = (int)(substr($urlParts['fragment'], 1));
                 $row = BackendUtility::getRecord('tt_content', $elementUid);
@@ -1549,25 +1645,26 @@ class StatisticsController extends MainController
                 $url = $pathSite . $url;
             }
 
-            $content = GeneralUtility::getURL($url);
+            $content = GeneralUtility::makeInstance(FetchUtility::class)->getContents($url);
             if (is_string($content) && preg_match('/\<\s*title\s*\>(.*)\<\s*\/\s*title\s*\>/i', $content, $matches)) {
                 // get the page title
                 $contentTitle = GeneralUtility::fixed_lgd_cs(trim($matches[1]), 50);
             } else {
                 // file?
+                // https://api.typo3.org/main/_general_utility_8php_source.html
                 $file = GeneralUtility::split_fileref($url);
                 $contentTitle = $file['file'];
             }
+
         }
-/**
-        if ($this->params['showContentTitle'] == 1) {
+
+        if ($this->implodedParams['showContentTitle'] == 1) {
             $label = $contentTitle;
         }
 
-        if ($this->params['prependContentTitle'] == 1) {
+        if ($this->implodedParams['prependContentTitle'] == 1) {
             $label =  $contentTitle . ' (' . $linkedWord . ')';
         }
-*/
 
         if (is_array($GLOBALS['TYPO3_CONF_VARS']['EXT']['directmail']['getLinkLabel'] ?? false)) {
             foreach ($GLOBALS['TYPO3_CONF_VARS']['EXT']['directmail']['getLinkLabel'] as $funcRef) {
@@ -1581,8 +1678,8 @@ class StatisticsController extends MainController
             $label = $url;
         }
 
-        if (isset($this->params['maxLabelLength']) && ($this->params['maxLabelLength'] > 0)) {
-            $label = GeneralUtility::fixed_lgd_cs($label, $this->params['maxLabelLength']);
+        if (isset($this->implodedParams['maxLabelLength']) && ($this->implodedParams['maxLabelLength'] > 0)) {
+            $label = GeneralUtility::fixed_lgd_cs($label, (int)$this->implodedParams['maxLabelLength']);
         }
 
         return $label;

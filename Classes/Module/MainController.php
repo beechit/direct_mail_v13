@@ -7,8 +7,11 @@ namespace DirectMailTeam\DirectMail\Module;
 use DirectMailTeam\DirectMail\Repository\PagesRepository;
 use DirectMailTeam\DirectMail\Utility\TsUtility;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\UriInterface;
+use TYPO3\CMS\Backend\Routing\Exception\RouteNotFoundException;
 use TYPO3\CMS\Backend\Routing\UriBuilder;
 use TYPO3\CMS\Backend\Template\ModuleTemplate;
+use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
 use TYPO3\CMS\Backend\Tree\View\PageTreeView;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
@@ -19,11 +22,15 @@ use TYPO3\CMS\Core\DataHandling\DataHandler;
 use TYPO3\CMS\Core\Http\Uri;
 use TYPO3\CMS\Core\Imaging\Icon;
 use TYPO3\CMS\Core\Imaging\IconFactory;
+use TYPO3\CMS\Core\Imaging\IconSize;
 use TYPO3\CMS\Core\Localization\LanguageService;
+use TYPO3\CMS\Core\Localization\LanguageServiceFactory;
 use TYPO3\CMS\Core\Messaging\FlashMessage;
+use TYPO3\CMS\Core\Messaging\FlashMessageQueue;
 use TYPO3\CMS\Core\Messaging\FlashMessageService;
 use TYPO3\CMS\Core\Page\PageRenderer;
 use TYPO3\CMS\Core\Type\Bitmask\Permission;
+use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Fluid\View\StandaloneView;
 
@@ -35,8 +42,6 @@ class MainController
      * @var ModuleTemplate
      */
     protected $moduleTemplate;
-    protected IconFactory $iconFactory;
-    protected PageRenderer $pageRenderer;
 
     /**
      * @var StandaloneView
@@ -60,7 +65,7 @@ class MainController
     protected string $perms_clause = '';
 
     protected array $implodedParams = [];
-    protected $userTable;
+    protected string $userTable = '';
     protected array $allowedTables = [];
     protected int $sys_language_uid = 0;
     protected array $pageinfo = [];
@@ -74,13 +79,10 @@ class MainController
      * @var ModuleTemplate $moduleTemplate
      */
     public function __construct(
-        ModuleTemplate $moduleTemplate = null,
-        IconFactory $iconFactory = null,
-        PageRenderer $pageRenderer = null
+        protected readonly ModuleTemplateFactory $moduleTemplateFactory,
+        protected readonly IconFactory $iconFactory,
+        protected readonly PageRenderer $pageRenderer
     ) {
-        $this->moduleTemplate = $moduleTemplate ?? GeneralUtility::makeInstance(ModuleTemplate::class);
-        $this->iconFactory = $iconFactory ?? GeneralUtility::makeInstance(IconFactory::class);
-        $this->pageRenderer = $pageRenderer ?? GeneralUtility::makeInstance(PageRenderer::class);
         $this->getLanguageService()->includeLLFile('EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf');
         $this->getLanguageService()->includeLLFile('EXT:direct_mail/Resources/Private/Language/locallang_csh_sysdmail.xlf');
     }
@@ -89,6 +91,8 @@ class MainController
     {
         $queryParams = $request->getQueryParams();
         $parsedBody = $request->getParsedBody();
+
+        $this->moduleTemplate = $this->moduleTemplateFactory->create($request);
 
         $this->id             = (int)($parsedBody['id']              ?? $queryParams['id'] ?? 0);
         $this->cmd            = (string)($parsedBody['cmd']          ?? $queryParams['cmd'] ?? '');
@@ -112,8 +116,6 @@ class MainController
         // initialize backend user language
         //$this->sys_language_uid = 0; //@TODO
 
-        $this->messageQueue = $this->getMessageQueue();
-
         if ($this->updatePageTree) {
             \TYPO3\CMS\Backend\Utility\BackendUtility::setUpdateSignal('updatePageTree');
         }
@@ -134,7 +136,7 @@ class MainController
     }
 
     /**
-        https://api.typo3.org/11.5/class_t_y_p_o3_1_1_c_m_s_1_1_core_1_1_messaging_1_1_abstract_message.html
+        https://api.typo3.org/main/class_t_y_p_o3_1_1_c_m_s_1_1_core_1_1_messaging_1_1_abstract_message.html
         const 	NOTICE = -2
         const 	INFO = -1
         const 	OK = 0
@@ -142,10 +144,14 @@ class MainController
         const 	ERROR = 2
      * @param string $messageText
      * @param string $messageHeader
-     * @param int $messageType
+     * @param ContextualFeedbackSeverity $messageType
      * @param bool $storeInSession
      */
-    protected function createFlashMessage(string $messageText, string $messageHeader = '', int $messageType = 0, bool $storeInSession = false)
+    protected function createFlashMessage(
+        string $messageText,
+        string $messageHeader,
+        ContextualFeedbackSeverity $messageType,
+        bool $storeInSession = false): FlashMessage
     {
         return GeneralUtility::makeInstance(
             FlashMessage::class,
@@ -156,18 +162,12 @@ class MainController
         );
     }
 
-    protected function getMessageQueue()
-    {
-        $flashMessageService = GeneralUtility::makeInstance(FlashMessageService::class);
-        return $flashMessageService->getMessageQueueByIdentifier();
-    }
-
     protected function getModulName()
     {
         $module = $this->pageinfo['module'] ?? false;
 
-        if (!$module && isset($this->pageinfo['pid'])) {
-            $pidrec = BackendUtility::getRecord('pages', (int)$this->pageinfo['pid']);
+        if (!$module && isset($this->pageinfo['uid'])) {
+            $pidrec = BackendUtility::getRecord('pages', (int)$this->pageinfo['uid']);
             $module = $pidrec['module'] ?? false;
         }
 
@@ -184,7 +184,15 @@ class MainController
      */
     protected function getLanguageService(): LanguageService
     {
-        return $GLOBALS['LANG'];
+        return GeneralUtility::makeInstance(LanguageServiceFactory::class)->createFromUserPreferences($this->getBackendUser());
+    }
+
+    /**
+     * @return FlashMessageQueue
+     */
+    protected function getFlashMessageQueue(string $identifier): FlashMessageQueue
+    {
+        return GeneralUtility::makeInstance(FlashMessageService::class)->getMessageQueueByIdentifier($identifier);
     }
 
     /**
@@ -216,7 +224,13 @@ class MainController
         return GeneralUtility::makeInstance(DataHandler::class);
     }
 
-    protected function buildUriFromRoute($name, $parameters = []): Uri
+    /**
+     * @param string $name
+     * @param array $parameters
+     * @return UriInterface
+     * @throws RouteNotFoundException
+     */
+    protected function buildUriFromRoute(string $name, array $parameters = []): UriInterface
     {
         /** @var UriBuilder $uriBuilder */
         $uriBuilder = GeneralUtility::makeInstance(UriBuilder::class);
@@ -291,7 +305,7 @@ class MainController
 
     protected function getIconActionsOpen(): Icon
     {
-        return $this->iconFactory->getIcon('actions-open', Icon::SIZE_SMALL);
+        return $this->iconFactory->getIcon('actions-open', IconSize::SMALL);
     }
 
     /**
@@ -302,13 +316,14 @@ class MainController
      *
      * @return	array		list of record
      */
-    protected function getRecordList(array $listArr, string $table)
+    protected function getRecordList(array $listArr, string $table): array
     {
         $lang = $this->getLanguageService();
+        $lllFile = 'LLL:EXT:direct_mail/Resources/Private/Language/locallang_mod2-6.xlf';
         $output = [
-            'title' => $lang->getLL('dmail_number_records'),
-            'editLinkTitle' => $lang->getLL('dmail_edit'),
-            'actionsOpen' => $this->iconFactory->getIcon('actions-open', Icon::SIZE_SMALL),
+            'title' => $lang->sL($lllFile . ':dmail_number_records'),
+            'editLinkTitle' => $lang->sL($lllFile . ':dmail_edit'),
+            'actionsOpen' => $this->iconFactory->getIcon('actions-open', IconSize::SMALL),
             'counter' => is_array($listArr) ? count($listArr) : 0,
             'rows' => [],
         ];
@@ -317,7 +332,7 @@ class MainController
         $isAllowedEditTable = $this->getBackendUser()->check('tables_modify', $table);
 
         if (is_array($listArr)) {
-            $notAllowedPlaceholder = $lang->getLL('mailgroup_table_disallowed_placeholder');
+            $notAllowedPlaceholder = $lang->sL($lllFile . ':mailgroup_table_disallowed_placeholder');
             $tableIcon = $this->iconFactory->getIconForRecord($table, []);
             foreach ($listArr as $row) {
                 $editLink = '';
@@ -359,17 +374,16 @@ class MainController
 
     /**
      * generate edit link for records
+     * https://docs.typo3.org/m/typo3/reference-coreapi/main/en-us/ApiOverview/Backend/EditLinks.html
      *
-     * @param $params
-     * @return string
+     * @param array $params
+     * @return Uri
      * @throws \TYPO3\CMS\Backend\Routing\Exception\RouteNotFoundException
      */
-    protected function getEditOnClickLink(array $params): string
+    protected function getEditOnClickLink(array $params): Uri
     {
-        /** @var UriBuilder $uriBuilder */
-        $uriBuilder = GeneralUtility::makeInstance(UriBuilder::class);
-
-        return 'window.location.href=' . GeneralUtility::quoteJSvalue((string)$uriBuilder->buildUriFromRoute('record_edit', $params)) . '; return false;';
+        $backendUriBuilder = GeneralUtility::makeInstance(UriBuilder::class);
+        return $backendUriBuilder->buildUriFromRoute('record_edit', $params);
     }
 
     /**
@@ -382,14 +396,13 @@ class MainController
     protected function rearrangePlainMails(array $plainMails): array
     {
         $out = [];
-        if (is_array($plainMails)) {
-            $c = 0;
-            foreach ($plainMails as $v) {
-                $out[$c]['email'] = trim($v);
-                $out[$c]['name'] = '';
-                $c++;
-            }
+        $c = 0;
+        foreach ($plainMails as $v) {
+            $out[$c]['email'] = trim($v);
+            $out[$c]['name'] = '';
+            $c++;
         }
+
         return $out;
     }
 
@@ -400,7 +413,7 @@ class MainController
      *
      * @return array Cleaned array
      */
-    protected function cleanPlainList(array $plainlist)
+    protected function cleanPlainList(array $plainlist): array
     {
         /**
          * $plainlist is a multidimensional array.
@@ -426,12 +439,12 @@ class MainController
      * @param string $perms_clause Select query clause
      * @return array the page ID, recursively
      */
-    protected function getRecursiveSelect($id, $perms_clause)
+    protected function getRecursiveSelect(int $id, string $perms_clause): array
     {
         $getLevels = 10000;
         // Finding tree and offer setting of values recursively.
         $tree = GeneralUtility::makeInstance(PageTreeView::class);
-        $tree->init('AND ' . $perms_clause);
+        $tree->init(empty($perms_clause) ? ''  : 'AND ' . $perms_clause);
         $tree->makeHTML = 0;
         $tree->setRecs = 0;
         $tree->getTree($id, $getLevels, '');
@@ -439,66 +452,17 @@ class MainController
         return $tree->ids;
     }
 
-    protected function getJS($sys_dmail_uid)
+    protected function countRecipients(array $idLists): int
     {
-        return '
-        script_ended = 0;
-        function jumpToUrl(URL)	{
-            window.location.href = URL;
-        }
-        function jumpToUrlD(URL) {
-            window.location.href = URL+"&sys_dmail_uid=' . $sys_dmail_uid . '";
-        }
-        function toggleDisplay(toggleId, e, countBox) {
-            if (!e) {
-                e = window.event;
-            }
-            if (!document.getElementById) {
-                return false;
-            }
-
-            prefix = toggleId.split("-");
-            for (i=1; i<=countBox; i++){
-                newToggleId = prefix[0]+"-"+i;
-                body = document.getElementById(newToggleId);
-                image = document.getElementById(toggleId + "_toggle"); //ConfigurationController
-                //image = document.getElementById(newToggleId + "_toggle"); //DmailController
-                if (newToggleId != toggleId){
-                    if (body.style.display == "block"){
-                        body.style.display = "none";
-                        if (image) {
-                            image.className = image.className.replace( /expand/ , "collapse");
-                        }
-                    }
-                }
-            }
-
-            var body = document.getElementById(toggleId);
-            if (!body) {
-                return false;
-            }
-            var image = document.getElementById(toggleId + "_toggle");
-            if (body.style.display == "none") {
-                body.style.display = "block";
-                if (image) {
-                    image.className = image.className.replace( /collapse/ , "expand");
-                }
-            } else {
-                body.style.display = "none";
-                if (image) {
-                    image.className = image.className.replace( /expand/ , "collapse");
-                }
-            }
-            if (e) {
-                // Stop the event from propagating, which
-                // would cause the regular HREF link to
-                // be followed, ruining our hard work.
-                e.cancelBubble = true;
-                if (e.stopPropagation) {
-                    e.stopPropagation();
-                }
+        $count = 0;
+        foreach(['tt_address', 'fe_users', 'PLAINLIST'] as $recipientsType) {
+            if (is_array($idLists[$recipientsType] ?? false)) {
+                $count += count($idLists[$recipientsType]);
             }
         }
-        ';
+        if (!in_array($this->userTable, ['tt_address', 'fe_users', 'PLAINLIST']) && is_array($idLists[$this->userTable] ?? false)) {
+            $count += count($idLists[$this->userTable]);
+        }
+        return $count;
     }
 }
