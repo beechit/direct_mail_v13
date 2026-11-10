@@ -866,7 +866,7 @@ final class ImporterController extends MainController
             return $mydata;
         }
 
-        while (($data = fgetcsv($handle, 10000, $delimiter, $encaps)) !== false) {
+        while (($data = fgetcsv($handle, 10000, $delimiter, $encaps, '')) !== false) {
             // remove empty line in csv
             if ((count($data) >= 1)) {
                 $mydata[] = $data;
@@ -911,7 +911,7 @@ final class ImporterController extends MainController
             return $mydata;
         }
 
-        while ((($data = fgetcsv($handle, 10000, $delimiter, $encaps)) !== false)) {
+        while ((($data = fgetcsv($handle, 10000, $delimiter, $encaps, '')) !== false)) {
             // remove empty line in csv
             if ((count($data) >= 1)) {
                 $mydata[] = $data;

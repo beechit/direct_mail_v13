@@ -535,7 +535,7 @@ class ReadmailUtility
                 break;
             default:
                 if (strtolower($mailParts['_CONTENT_TYPE_DAT']['charset']) == 'utf-8') {
-                    $mailParts['CONTENT'] = utf8_decode($mailParts['CONTENT']);
+                    $mailParts['CONTENT'] = mb_convert_encoding($mailParts['CONTENT'], 'ISO-8859-1', 'UTF-8');
                 }
         }
         return $mailParts;

@@ -25,7 +25,7 @@ class DmCsvUtility
         if ($sep == 'tab') {
             $sep = "\t";
         }
-        while ($data = fgetcsv($fh, 1000, $sep)) {
+        while ($data = fgetcsv($fh, 1000, $sep, '"', '')) {
             $lines[] = $data;
         }
 

@@ -28,7 +28,7 @@ class SchedulerUtility
 
     public static function getDMTable(): array
     {
-        $taskSerializer = GeneralUtility::makeInstance(TaskSerializer::class);
+        $taskSerializer = GeneralUtility::makeInstance(TaskSerializer::class, GeneralUtility::makeInstance(\TYPO3\CMS\Core\Serializer\DenyListDeserializer::class));
         $registeredClasses = GeneralUtility::makeInstance(TaskService::class)->getAvailableTaskTypes();
 
         $tasks = GeneralUtility::makeInstance(TempRepository::class)->getDMTasks();

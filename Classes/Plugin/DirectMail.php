@@ -115,7 +115,7 @@ class DirectMail
     public $siteUrl;
     public $labelsList = 'header_date_prefix,header_link_prefix,uploads_header,media_header,images_header,image_link_prefix,caption_header,unrendered_content,link_prefix';
 
-    public function __construct($_ = null, TypoScriptFrontendController $frontendController = null, ServerRequestInterface $request = null)
+    public function __construct($_ = null, ?TypoScriptFrontendController $frontendController = null, ?ServerRequestInterface $request = null)
     {
         $this->request = $request ?: $GLOBALS['TYPO3_REQUEST'];
         $this->frontendController = $frontendController ?: $GLOBALS['TSFE'];
