@@ -701,15 +701,16 @@ final class StatisticsController extends MainController
 
             $label = $this->getLinkLabel($url, $urlstr, false, $htmlLinks[$id]['label']);
             $img = '<a href="' . $urlstr . '" target="_blank">' . $iconAppsToolbarMenuSearch . '</a>';
+            $html = (empty($urlCounter['html'][$id]['counter']) ? 0 : 1);
 
             if (isset($urlCounter['html'][$id]['plainId'])) {
                 $tblLines[] = [
                     $label,
                     $id,
                     $urlCounter['html'][$id]['plainId'],
-                    $urlCounter['total'][$origId]['counter'],
-                    $urlCounter['html'][$id]['counter'],
-                    $urlCounter['html'][$id]['plainCounter'],
+                    $urlCounter['total'][$origId]['counter'] ?? 0,
+                    $urlCounter['html'][$id]['counter'] ?? 0,
+                    $urlCounter['html'][$id]['plainCounter'] ?? 0,
                     $img,
                 ];
             } else {
@@ -718,7 +719,7 @@ final class StatisticsController extends MainController
                     $label,
                     ($html ? $id : '-'),
                     ($html ? '-' : $id),
-                    ($html ? $urlCounter['html'][$id]['counter'] : $urlCounter['plain'][$origId]['counter']),
+                    ($html ? ($urlCounter['html'][$id]['counter'] ?? 0) : ($urlCounter['plain'][$id]['counter'] ?? 0)),
                     $urlCounter['html'][$id]['counter'] ?? 0,
                     $urlCounter['plain'][$origId]['counter'] ?? 0,
                     $img,
@@ -1658,11 +1659,11 @@ final class StatisticsController extends MainController
 
         }
 
-        if ($this->implodedParams['showContentTitle'] == 1) {
+        if (($this->implodedParams['showContentTitle'] ?? 0) == 1) {
             $label = $contentTitle;
         }
 
-        if ($this->implodedParams['prependContentTitle'] == 1) {
+        if (($this->implodedParams['prependContentTitle'] ?? 0) == 1) {
             $label =  $contentTitle . ' (' . $linkedWord . ')';
         }
 

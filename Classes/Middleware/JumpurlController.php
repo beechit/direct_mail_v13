@@ -31,6 +31,7 @@ use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Crypto\HashService;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\MathUtility;
+use TYPO3\CMS\Frontend\Controller\ErrorController;
 
 /**
  * JumpUrl processing hook on TYPO3\CMS\Frontend\Http\RequestHandler
@@ -103,10 +104,8 @@ class JumpurlController implements MiddlewareInterface
                 if (!empty($this->recipientRecord)) {
                     $valid = AuthCodeUtility::validateAuthCode($submittedAuthCode, $this->recipientRecord, ($this->directMailRecord['authcode_fieldList'] ?: 'uid'));
                     if (!$valid) {
-                        throw new \Exception(
-                            'authCode verification failed.',
-                            1376899631
-                        );
+                        return GeneralUtility::makeInstance(ErrorController::class)
+                            ->accessDeniedAction($request, 'authCode verification failed.');
                     }
 
                     $jumpurl = $this->substituteMarkersFromTargetUrl($jumpurl);
